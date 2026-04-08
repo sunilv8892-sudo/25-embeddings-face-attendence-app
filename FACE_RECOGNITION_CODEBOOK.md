@@ -1,1015 +1,696 @@
-# Face Recognition Attendance System Codebook
+# FAS Codebook
 
-This document is written as a reconstruction guide.
-The goal is not only to describe what the app does, but to explain why each
-piece exists, how the pieces fit together, and how a developer could rebuild a
-similar app from the explanation alone.
+This document is the deep, implementation-level guide for the current codebase.
+It is written for maintainers who need to understand exactly how the running app works,
+why specific decisions were made, and where to change behavior safely.
 
-The app is a Flutter-based, offline, camera-driven face recognition attendance
-system. It uses:
+Scope of this codebook:
 
-- live camera frames,
-- ML Kit face detection and face mesh data,
-- FaceNet-style embeddings,
-- KNN-style nearest-neighbor matching,
-- local persistence with SharedPreferences,
-- CSV export,
-- dashboard analytics,
-- a rule-based emotion cue model,
-- UI styling tuned for a dark, premium dashboard look.
+- Current production architecture only.
+- Behavior implemented in the existing `lib/` source tree.
+- File responsibilities and runtime flow.
+- Requirements, constraints, trade-offs, and known issues.
 
-## How To Read This Codebook
+Out of scope:
 
-The document is organized in the same order a developer would explore the app:
+- Historical legacy detection architectures that are no longer active.
+- Deprecated migration plans that are no longer active in code.
 
-1. App bootstrap.
-2. Shared constants and theme.
-3. Storage and domain models.
-4. ML modules.
-5. Each screen.
-6. End-to-end runtime flow.
+---
 
-Each section explains:
+## 1. System Snapshot
 
-- what the file is responsible for,
-- how the major parts of the file work,
-- why those design choices are good here,
-- what trade-offs the implementation makes.
+### 1.1 What the app does
 
-## 1. App Bootstrap
+FAS is an offline mobile attendance app that uses face recognition for marking student presence.
+The app can:
 
-### [lib/main.dart](lib/main.dart)
+1. Enroll students with profile details and multiple face samples.
+2. Convert cropped face images into 128D embeddings.
+3. Match live camera embeddings against stored embeddings using KNN-style nearest-neighbor logic.
+4. Mark attendance with duplicate prevention and multi-step confidence gates.
+5. Tag attendance with emotion labels from a cue-based expression model.
+6. Export attendance and embedding reports to CSV/JSON.
+7. Backup and restore the local datastore.
 
-This file is the entry point. It is small, and that is a good thing. The app
-should not contain business logic in `main()`; it should only prepare the app
-and hand control to the route tree.
+### 1.2 Core technology stack
 
-#### Imports
+- Flutter + Dart
+- Camera plugin (`camera`)
+- Face detection: Google ML Kit (`google_ml_kit`) + optional face mesh (`google_mlkit_face_mesh_detection`)
+- Face embeddings: TFLite (`tflite_flutter`) using `assets/models/embedding_model.tflite`
+- Local persistence: `shared_preferences`
+- Speech feedback: `flutter_tts`
+- Export/share: `share_plus`, platform channel, local file IO
 
-The imports tell you the shape of the app immediately.
+### 1.3 Active app identity
 
-- `material.dart` gives the Flutter UI framework.
-- `database_manager.dart` is loaded early so persistence is ready before the UI
-  tries to read from it.
-- The screen imports tell you that the app is screen-driven rather than a
-  single-page state machine.
-- `constants.dart` gives the app-wide theme and route names.
+Defined in `lib/utils/constants.dart`:
 
-That import list is good because it reveals dependencies clearly and keeps the
-bootstrap file thin.
+- App name: `FAS`
+- App version constant: `18.4.0`
+- Route root: `/`
 
-#### Database initialization
+Android label (`android/app/src/main/AndroidManifest.xml`) is also set to `FAS`.
 
-The global `DatabaseManager` is created once and initialized before `runApp()`.
-That is the right choice because:
+---
 
-- the app needs local data before the first screen renders,
-- the home screen reads statistics immediately,
-- the attendance and enrollment flows depend on persisted state,
-- startup errors can be caught early rather than during navigation.
+## 2. Requirements and Runtime Preconditions
 
-This is a good pattern for local-first apps. It avoids a situation where the UI
-opens before storage is ready and then has to recover from a half-initialized
-state.
+### 2.1 Development/runtime requirements
 
-#### `FaceRecognitionApp`
+- Dart SDK compatible with `^3.10.7` (from `pubspec.yaml`)
+- Flutter environment with platform setup for Android/iOS
+- Camera hardware access
+- Bundled model assets in `assets/models/`
 
-The widget is stateless, which is also a good choice. The app shell does not
-need to own mutable business state because the individual screens already own
-their own state.
+### 2.2 Required permissions
 
-Inside `MaterialApp`:
+Android manifest includes:
 
-- `debugShowCheckedModeBanner: false` keeps the UI clean.
-- `title` comes from constants so the name is used consistently.
-- `theme` uses the shared dark theme, which keeps every screen visually aligned.
-- `initialRoute` starts on the home screen.
-- `routes` defines the navigation graph.
+- `android.permission.CAMERA`
+- `android.permission.READ_EXTERNAL_STORAGE`
+- `android.permission.WRITE_EXTERNAL_STORAGE`
 
-The route table is the real architecture map of the app. If you want to rebuild
-the app, this is the first place to understand navigation.
+At runtime, camera permission is requested in enrollment/attendance/expression screens.
 
-## 2. Shared Visual System
+### 2.3 Required model assets
 
-### [lib/utils/constants.dart](lib/utils/constants.dart)
+Used directly by app code:
 
-This file matters more than it looks like. It is not only a constants bag. It is
-the visual and behavioral contract for the entire app.
+1. `assets/models/embedding_model.tflite`
+2. `assets/models/expression_cue_calibration.json`
 
-#### App identity
+Notes:
 
-`appName`, `appVersion`, and `subtitle` define the branding. Keeping them in one
-place avoids hard-coded text scattered across the UI.
+- `assets/models/lda.pkl`, `assets/models/scaler.pkl`, and `assets/models/svm.pkl` are present but not loaded by the active Flutter runtime.
+- `models/README.md` discusses additional training artifacts for reproducibility.
 
-#### Colors
+---
 
-The color palette is intentionally dark and premium:
+## 3. High-Level Architecture
 
-- deep navy background,
-- indigo primary accent,
-- cyan accent,
-- emerald success,
-- amber warning,
-- red error.
+### 3.1 Layered structure
 
-This palette is good because it gives the app a strong visual identity while
-still keeping text readable on mobile screens.
+1. UI layer (`lib/screens/`, `lib/widgets/`)
+2. Domain/model layer (`lib/models/`)
+3. ML modules (`lib/modules/`)
+4. Persistence layer (`lib/database/database_manager.dart`)
+5. Cross-cutting utilities (`lib/utils/`)
 
-The theme avoids default Flutter gray-on-white patterns. That matters because a
-camera-based attendance app should feel like a focused operational tool, not a
-generic sample project.
+### 3.2 Bootstrapping
+
+`lib/main.dart` initializes `DatabaseManager` before `runApp`, then mounts `MaterialApp` with route table.
+
+Active routes:
+
+- `/` -> `HomeDashboardScreen`
+- `/enroll` -> `EnrollmentScreen`
+- `/attendance` -> `AttendancePrepScreen`
+- `/database` -> `DatabaseScreen`
+- `/export` -> `ExportScreen`
+- `/settings` -> `SettingsScreen`
+- `/expression_detection` -> `ExpressionDetectionScreen`
+
+### 3.3 Design intent
+
+- Offline-first: no backend dependency for normal operation.
+- Predictable local state: JSON-like records in SharedPreferences.
+- Modular ML pipeline: detection, embedding, matching, attendance management, liveness, and expression are separated into modules.
+- Mobile UX priority: quick startup, camera-first workflows, and immediate feedback.
+
+---
+
+## 4. Repository and File Responsibilities
+
+### 4.1 Current responsibility map
+
+```
+lib/
+  main.dart                         # App entry point and route map
+  database/
+    database_manager.dart           # Active persistence gateway (SharedPreferences)
+    database_connection.dart        # Drift/SQLite helper (currently not active in runtime)
+    face_recognition_database.dart  # Deprecated placeholder, intentionally unused
+  models/
+    student_model.dart              # Student identity/profile schema
+    embedding_model.dart            # Face embedding schema (vector + metadata)
+    attendance_model.dart           # Attendance record schema and enums
+    subject_model.dart              # Subject + teacher-session schema
+    face_detection_model.dart       # Face detection DTO used by camera flows
+    match_result_model.dart         # Matching result DTO
+  modules/
+    m1_face_detection.dart          # ML Kit face detection + mesh + ROI utilities
+    m2_face_embedding.dart          # TFLite FaceNet-128 inference
+    m3_face_matching.dart           # Generic Euclidean matcher (module-level)
+    m4_attendance_management.dart   # Reporting/statistics/export helper logic
+    m5_liveness_detection.dart      # Blink-based liveness checks
+    expression_cue_model.dart       # Cue-based expression inference
+    expression_cue_calibration.dart # Calibration load/defaults for expression model
+  screens/
+    home_dashboard_screen.dart      # Main dashboard and feature navigation
+    enrollment_screen.dart          # Student registration + sample capture
+    attendance_prep_screen.dart     # Teacher/subject setup for attendance session
+    attendance_screen.dart          # Live recognition and attendance marking
+    database_screen.dart            # Analytics and enrolled-student views
+    export_screen.dart              # Attendance/embedding export and file management
+    settings_screen.dart            # Preferences, backup/restore, credits, stats
+    expression_detection_screen.dart# Standalone expression detection tool
+    home_screen.dart                # Legacy screen (not in active route table)
+  utils/
+    constants.dart                  # Branding, theme, dimensions, route constants
+    app_route_observer.dart         # Route observer singleton
+    export_utils.dart               # Shared export directory resolver
+    csv_export_service.dart         # Alternate CSV service (partially legacy path)
+    theme.dart                      # Older alternate theme (not used by main app)
+  widgets/
+    animated_background.dart        # Shared visual background wrapper
+```
+
+### 4.2 Files that are present but not primary runtime path
+
+1. `lib/database/face_recognition_database.dart`
+   - Explicitly documented as deprecated.
+2. `lib/utils/theme.dart`
+   - Contains an alternate light theme system, but app uses `AppTheme` in `lib/utils/constants.dart`.
+3. `lib/screens/home_screen.dart`
+   - Legacy home screen, not referenced in route map.
+4. `lib/database/database_connection.dart`
+   - Drift helper, retained but not used by active storage implementation.
+
+These files are useful for historical context but should not be treated as active architecture.
+
+---
+
+## 5. Persistence and Data Schema
+
+### 5.1 Storage strategy
+
+The active datastore is `SharedPreferences` with JSON-encoded records.
+`DatabaseManager` centralizes all read/write logic and acts as the application persistence API.
+
+### 5.2 SharedPreferences keys
 
-#### Spacing and shape
+- `students` -> list of serialized student records
+- `embeddings` -> list of serialized embeddings
+- `attendance` -> list of serialized attendance rows
+- `subjects` -> list of serialized subject rows
+- `teacherSessions` -> list of serialized teacher session rows
+- `tts_enabled` -> boolean preference
 
-The padding and radius constants reduce layout drift. When multiple screens use
-the same spacing values, the app feels deliberate instead of pieced together.
+### 5.3 Record schemas
+
+Student fields:
+
+- `id`
+- `name`
+- `roll_number`
+- `class`
+- `gender`
+- `age`
+- `phone_number`
+- `enrollment_date`
 
-#### Shadows and gradients
+Embedding fields:
 
-The shadow and gradient constants are part of the brand language. The cards and
-buttons look raised and tactile because the app uses shadow depth as feedback.
-That is a good fit for a dashboard-style mobile UI.
+- `id`
+- `studentId`
+- `vector` (128D)
+- `captureDate`
 
-#### Recognition thresholds
+Attendance fields:
 
-`similarityThreshold`, `requiredEnrollmentSamples`, and `embeddingDimension` are
-not random numbers. They encode how the recognition system is expected to work:
+- `id`
+- `studentId`
+- `date`
+- `time`
+- `status` (`present`, `absent`, `late`)
+- `recordedAt`
+- `emotion`
 
-- embeddings should be 128D,
-- enrollment should capture multiple samples,
-- recognition should reject weak matches.
+Subject fields:
 
-That makes the app safer than using a single snapshot and a loose threshold.
+- `id`
+- `name`
+- `createdAt`
 
-#### Routes
+Teacher session fields:
 
-The route names are constants, which prevents typo bugs and makes navigation
-more maintainable.
+- `id`
+- `teacherName`
+- `subjectId`
+- `subjectName`
+- `date`
+- `createdAt`
 
-#### Theme
+### 5.4 Data integrity behavior
 
-`AppTheme.lightTheme` is actually a dark theme. The naming reflects the app’s
-older structure, but the implementation is now a dark Material 3 theme.
+`DatabaseManager` includes runtime protections:
 
-Why this is good:
+1. ID generation by max+1 for student/embedding/attendance inserts.
+2. Date-based deduplication for attendance views, keeping latest `recordedAt` per student/day.
+3. Helper methods for class/session filtering.
 
-- every component inherits the same color system,
-- button and input styling stays consistent,
-- the app looks coherent across screens,
-- developers can change the look centrally instead of editing every screen.
+Trade-off:
 
-## 3. Data Layer
+- This model is simpler than relational SQL and avoids codegen friction.
+- It is less ideal for large-scale querying or strict transactional guarantees.
 
-### [lib/database/database_manager.dart](lib/database/database_manager.dart)
+---
 
-This is the persistence layer. It uses SharedPreferences as a structured JSON
-store rather than a SQL database.
+## 6. ML Pipeline Modules
 
-That choice is good for this app because:
+### 6.1 M1 - Face detection (`m1_face_detection.dart`)
 
-- the data model is small,
-- the app is offline-first,
-- the records are simple to serialize,
-- the repository already relies on local device storage,
-- the code stays easier to reason about than a full relational setup.
+Primary responsibilities:
 
-It is also a trade-off:
+1. Initialize ML Kit face detector.
+2. Optionally initialize face mesh detector.
+3. Detect faces from image path/bytes.
+4. Convert ML Kit output into local `DetectedFace` model.
+5. Support ROI extraction and quality checks.
 
-- simpler than SQLite,
-- faster to implement,
-- but less suitable for large datasets or complex queries.
+Key parameters:
 
-#### Singleton design
+- `minFaceSize: 0.1`
+- `performanceMode: fast`
+- `minDetectionConfidence` constant exists at `0.5`
 
-The manager is a singleton. That is good because the app should not create many
-independent storage gateways. One storage manager means one source of truth.
+Quality gating:
 
-#### Student operations
+- Reject very small faces (`faceArea < 10000`) for embedding suitability.
+- Reject extreme yaw/roll ranges for enrollment quality.
 
-The student methods create, read, update, and delete records stored under the
-`students` key.
+Pattern:
 
-The important implementation detail is the generated `id`. New IDs are computed
-by scanning existing records and choosing the next integer.
+- Implemented as singleton to prevent repeated heavy detector allocation.
 
-That is a practical choice because SharedPreferences does not auto-generate IDs.
+### 6.2 M2 - Face embedding (`m2_face_embedding.dart`)
 
-#### Embedding operations
+Primary responsibilities:
 
-Embeddings are stored under `embeddings` and tied to a `studentId`.
+1. Load `assets/models/embedding_model.tflite` once.
+2. Read tensor shapes dynamically.
+3. Resize face ROI to model input dimensions.
+4. Produce 128D embedding vector.
+5. Apply L2 normalization.
 
-This is the core of the recognition system. The student record is not enough on
-its own; the embedding is what allows the app to identify someone later.
+Key details:
 
-The embedding records include:
+- Declared model: `FaceNet-128`
+- Threads: 4
+- Validates output dimensionality against expected 128
+- Returns normalized embeddings for downstream KNN matching
 
-- the embedding vector,
-- the owning student,
-- the capture time.
+### 6.3 M3 - Generic matching (`m3_face_matching.dart`)
 
-That is good design because embeddings can be traced back to the enrollment
-session that created them.
+Primary responsibilities:
 
-#### Attendance operations
+1. Compute Euclidean distance between vectors.
+2. Convert distance to similarity: `1 / (1 + distance)`.
+3. Return best match or unknown based on threshold.
 
-Attendance is stored as records with:
+Notes:
 
-- studentId,
-- date,
-- time,
-- status,
-- recordedAt,
-- emotion.
+- Module default threshold is `0.60`.
+- Attendance screen has additional custom matching guards beyond this module.
 
-The `recordedAt` field is important. It lets the app know when the record was
-saved, not just the nominal attendance date.
+### 6.4 M4 - Attendance management (`m4_attendance_management.dart`)
 
-The manager also reads attendance by student and by date, which is what the
-dashboard and export logic need.
+Primary responsibilities:
 
-#### Subject operations and sessions
+1. Record attendance while preventing same-day duplicates.
+2. Produce attendance stats and reports.
+3. Export attendance and embedding CSV outputs.
 
-Subjects and teacher sessions support the attendance-prep workflow. This is good
-because attendance should be attached to a teacher and a subject, not only a raw
-student list.
+### 6.5 M5 - Liveness (`m5_liveness_detection.dart`)
 
-That context is what makes the system usable in a school or class setting.
+Primary responsibilities:
 
-## 4. Domain Models
+1. Blink-based liveness estimation using Eye Aspect Ratio.
+2. Detect blink pattern in temporal EAR sequence.
 
-You asked for something close to a build-from-scratch guide, so the models matter
-as much as the screens.
+Key parameters:
 
-### Student model
+- `blinkThreshold = 0.3`
+- `requiredBlinks = 2`
+- `blinkTimeout = 10 seconds`
 
-The student model represents enrollment metadata such as name, roll number,
-class, gender, age, phone number, and enrollment date.
+### 6.6 Expression cue model (`expression_cue_model.dart`)
 
-Why this is good:
+Primary responsibilities:
 
-- it keeps identity data together,
-- it supports both UI display and exports,
-- it makes future edits or backups straightforward.
+1. Load calibration from `expression_cue_calibration.json`.
+2. Compute emotion scores using face probabilities and landmark-derived cues.
+3. Apply heuristic overrides and normalization.
+4. Return label + confidence + probability map.
 
-### Embedding model
+Classes used by app flows:
 
-The embedding model stores the 128D vector that represents a face.
+- Attendance screen for emotion tagging at mark time
+- Expression detection screen for standalone real-time analysis
 
-This is the actual machine-readable identity for recognition. The UI sees a
-student name, but the matcher sees a vector.
+---
 
-### Attendance model
+## 7. Screen-by-Screen Behavior
 
-The attendance model stores status and timestamps.
+### 7.1 Home dashboard (`home_dashboard_screen.dart`)
 
-This is good because the app can compute summaries later without needing to
-re-scan faces.
+Responsibilities:
 
-### Subject model
+1. Show top-level stats: total students, present today, sessions.
+2. Provide feature navigation cards.
+3. Refresh stats on route return via `RouteAware`.
 
-Subjects are separate records. That is the right choice because teachers should
-be able to create or pick subjects independently of students.
+Details:
 
-### Match result model
+- Uses fixed percentage-based vertical layout sections.
+- Calculates sessions using teacher sessions, with fallback logic when attendance exists but no explicit teacher session row.
 
-The match result carries identity type, studentId, and similarity. That is a
-clean abstraction because matching is a decision, not just a distance number.
+### 7.2 Enrollment (`enrollment_screen.dart`)
 
-## 5. Face Recognition Modules
+Responsibilities:
 
-### [lib/modules/m1_face_detection.dart](lib/modules/m1_face_detection.dart)
+1. Collect student metadata.
+2. Capture multiple face samples from camera.
+3. Run detection + quality checks + embedding generation.
+4. Save student and embeddings.
 
-This module handles face detection and face mesh extraction.
+Important quality guards:
 
-#### Why a dedicated module exists
+- Minimum detected face dimensions (~150x150) for enrollment sample acceptance.
+- Centering checks to reduce poor-angle captures.
+- Required sample target driven by constants (`requiredEnrollmentSamples = 10`).
 
-Keeping detection in its own file is good because detection is a separate
-responsibility from embedding and matching.
+### 7.3 Attendance setup (`attendance_prep_screen.dart`)
 
-#### Singleton pattern
+Responsibilities:
 
-The detector is a singleton. That is important because ML Kit resources are
-heavy, and repeatedly constructing them can waste memory and slow down the app.
+1. Capture teacher name.
+2. Select or create subject.
+3. Transition into live attendance session with validated setup state.
 
-#### Initialization
+### 7.4 Attendance runtime (`attendance_screen.dart`)
 
-The detector can be initialized with face mesh enabled.
+This is the core runtime surface.
 
-That is useful because:
+Responsibilities:
 
-- attendance needs face boxes,
-- expression scoring benefits from mesh contours,
-- enrollment can use the same pipeline.
+1. Initialize camera stream and modules.
+2. Detect faces from live frames.
+3. Generate embeddings per detected face.
+4. Match via KNN-like weighted voting and multi-stage verification.
+5. Enforce consecutive detections before final mark.
+6. Track and display overlays (name, status, emotion).
+7. Persist attendance and session records.
+8. Trigger TTS confirmation (if enabled).
 
-#### Detecting faces
+Key runtime constants in this screen:
 
-The module supports detection from raw bytes and from a file path.
+- Stream scan interval: `400ms`
+- Similarity slider baseline: `0.75`
+- K for local KNN voting: `5`
+- Required consecutive detections: `2`
+- Detection cooldown: `1 second`
 
-That flexibility is good because different screens produce images differently.
+Matching strategy in attendance runtime:
 
-Attendance uses live camera frames, while some preprocessing paths may use
-temporary files.
+1. Build neighbor list from all enrollment embeddings.
+2. Rank by Euclidean distance.
+3. Weighted vote + count + best-sim tie-break.
+4. Convert slider threshold into effective Euclidean-sim threshold.
+5. Reject insufficient votes.
+6. Stage-2 candidate verification against candidate's own templates.
+7. Enforce minimum support counts and top-average strength.
+8. Ambiguity rejection using margin against second-best candidate.
 
-#### ROI extraction
+This layered gating is the main false-positive defense.
 
-The `extractFaceROI` method crops the face region out of the source image.
+Persistence on submit:
 
-That is a good preprocessing step because recognition models should focus on the
-face, not the background.
+- Writes attendance rows to `attendance` key.
+- Writes teacher session to `teacherSessions`.
+- Stores session payload keyed by teacher+subject+date in SharedPreferences.
 
-#### Suitability checks
+### 7.5 Database dashboard (`database_screen.dart`)
 
-The module rejects faces that are too small or too rotated.
+Responsibilities:
 
-That is good because embeddings from tiny or side-angled faces tend to be noisy.
+1. Overview tab for system stats.
+2. Attendance history grouped by date.
+3. Per-student attendance summary.
+4. Enrolled-students tab with attendance metrics.
 
-### [lib/modules/m2_face_embedding.dart](lib/modules/m2_face_embedding.dart)
+### 7.6 Export (`export_screen.dart`)
 
-This module converts a cropped face image into a 128D embedding.
+Responsibilities:
 
-#### Why this module exists
+1. Export attendance register CSV.
+2. Export embeddings CSV.
+3. Load, view, share, and delete saved export files.
+4. Save to app export directory and attempt Android downloads save via method channel.
 
-It isolates model inference from the UI. That separation is good because:
+Directory source of truth:
 
-- the UI stays readable,
-- the model logic can be reused,
-- model changes do not force screen rewrites.
+- `getExportDirectory()` from `lib/utils/export_utils.dart`
 
-#### FaceNet choice
+### 7.7 Settings (`settings_screen.dart`)
 
-The code uses a FaceNet-style TFLite model. That is a sensible choice for an
-offline recognition app because embeddings are compact and easy to compare.
+Responsibilities:
 
-#### Initialization checks
+1. Toggle TTS preference (`tts_enabled`).
+2. Show datastore counts and approximate data size.
+3. Backup all main lists to JSON.
+4. Restore from backup file (replace mode).
+5. Merge from backup file (additive mode).
+6. Credits and about details.
 
-The module reads input and output tensor shapes and validates the output length.
+### 7.8 Expression detection (`expression_detection_screen.dart`)
 
-This is good engineering. It prevents silent failures when the model asset is
-wrong or replaced with an incompatible file.
+Responsibilities:
 
-#### Preprocessing
+1. Standalone expression analysis workflow.
+2. Continuous camera stream processing with warmup and stabilization.
+3. Overlay rendering and expression timeline log.
 
-The image is resized to the model’s input size and normalized to float values in
-the 0 to 1 range.
+Stabilization controls:
 
-That is the right type of preprocessing for this kind of model because the
-network expects a fixed-size numerical tensor, not raw image bytes.
+- Temporal window and confidence/margin gates.
+- Min log interval and stable hold timers.
 
-#### Normalization
+---
 
-The final embedding is L2-normalized.
+## 8. End-to-End Runtime Flows
 
-That is a strong choice because similarity and distance comparisons become more
-stable when all vectors live on a comparable scale.
+### 8.1 Enrollment flow
 
-### [lib/modules/m3_face_matching.dart](lib/modules/m3_face_matching.dart)
+1. User opens enrollment screen.
+2. Student profile data entered.
+3. Camera captures frames.
+4. ML Kit detects best face.
+5. Quality checks run (size/centering).
+6. Face ROI passed to FaceNet module.
+7. 128D normalized embedding stored in memory list.
+8. After enough samples, student + embeddings persisted.
 
-This is the matching helper module.
+### 8.2 Attendance flow
 
-#### Important clarification
+1. User enters teacher + subject in prep screen.
+2. Attendance screen starts live scanning.
+3. Every interval, frame processed for faces.
+4. For each valid face:
+   - create embedding
+   - run KNN+verification
+   - derive emotion
+5. If same student is confirmed for required consecutive detections:
+   - mark present in local state
+   - show overlay and optional TTS feedback
+6. On submit:
+   - write attendance rows
+   - write teacher session
+   - generate/export reports
 
-This is not a trainable classifier. It is nearest-neighbor matching on face
-embeddings. The file names it as KNN, but the main runtime behavior is nearest
-neighbor + thresholding.
+### 8.3 Export/reporting flow
 
-That is good here because the app does not need to train a model every time new
-students are added. It just needs to compare vectors.
+1. Export screen initializes `AttendanceManagementModule`.
+2. User triggers attendance or embedding export.
+3. CSV file generated and saved under `FaceAttendanceExports`.
+4. App can share file via OS share sheet.
 
-#### `matchFace()`
+---
 
-This method finds the single closest embedding by Euclidean distance, converts
-the distance to a similarity-like score, and accepts the result only if it is
-above threshold.
+## 9. Thresholds, Defaults, and Tuning
 
-Why this is good:
+### 9.1 Recognition-related values
 
-- simple,
-- fast,
-- explainable,
-- easy to debug,
-- works well for local offline apps.
+- Global constant similarity threshold: `0.75` (`constants.dart`)
+- Attendance screen working threshold baseline: `0.75`
+- Attendance internal KNN vote size: `5`
+- Attendance required consecutive detections: `2`
+- Attendance stream scan period: `400ms`
 
-#### `knnMatch()`
+### 9.2 Liveness values
 
-This method sorts all embeddings by distance and takes the top K entries.
+- EAR blink threshold: `0.3`
+- Required blinks: `2`
+- Blink timeout window: `10s`
 
-In practice the app’s attendance flow uses a KNN-inspired validation scheme with
-votes and threshold checks. That makes the system more robust than a single raw
-distance comparison.
+### 9.3 Expression calibration defaults
 
-#### Why Euclidean distance
+From `expression_cue_calibration.dart`:
 
-Euclidean distance is straightforward for normalized embeddings. It is easy to
-convert into a similarity score using `1 / (1 + distance)`.
+- Happy smile threshold: `0.58`
+- Surprise mouth-open minimum: `0.09`
+- Neutral eye-open minimum: `0.35`
+- Softmax temperature: `0.75`
 
-That conversion is useful because it gives the UI and logging a score that is
-easier to read than a raw distance value.
+These can be changed by updating `assets/models/expression_cue_calibration.json`.
 
-### [lib/modules/m4_attendance_management.dart](lib/modules/m4_attendance_management.dart)
+---
 
-This module handles higher-level attendance logic.
+## 10. Key Design Rationale
 
-It is a good design because it sits above raw storage and below the UI. That
-keeps report generation and attendance summaries out of the screens.
+### 10.1 Why SharedPreferences over SQL in current build
 
-#### `recordAttendance()`
+1. Simpler deployment and maintenance.
+2. Avoids drift/codegen migration friction.
+3. Suitable for moderate local data volumes in mobile attendance context.
 
-This method refuses duplicate attendance entries for the same student on the
-same day.
+Trade-off:
 
-That is important because attendance should be idempotent for a given day.
+- Lower query sophistication compared with proper relational DB.
 
-#### `getAttendanceDetails()`
+### 10.2 Why singleton heavy modules
 
-This method assembles student records, counts, and percentages into one object.
+ML Kit detectors and TFLite interpreters are expensive native objects.
+Singleton lifecycle reduces repeated allocation and helps avoid memory pressure during rapid navigation.
 
-That is useful because screens should not have to compute those fields manually
-every time they build a tile or dialog.
+### 10.3 Why layered match verification
 
-#### CSV export
+Simple nearest-neighbor alone can create false positives in near-look-alike cases.
+Attendance screen adds:
 
-The module exports attendance, embeddings, and detailed attendance CSVs.
+1. vote support checks,
+2. effective threshold conversion,
+3. candidate-only verification support,
+4. top-average strength checks,
+5. ambiguity margin checks,
+6. consecutive frame confirmation.
 
-That is good because it creates a portable output format that teachers or
-administrators can inspect outside the app.
+This is intentionally conservative for attendance integrity.
 
-### Liveness module
+---
 
-The liveness heuristics file exists to make recognition less naive. It is a
-supporting safety step, not a full anti-spoofing system.
+## 11. Known Issues and Maintenance Risks
 
-## 6. Screens
+### 11.1 Drift artifacts still present
 
-### [lib/screens/home_screen.dart](lib/screens/home_screen.dart)
+Risk:
 
-The home screen is the app’s dashboard and navigation hub.
+- `drift` dependencies and helper files remain while runtime uses SharedPreferences.
 
-#### Why the home screen is important
+Impact:
 
-This is the first user-facing screen, so it needs to establish trust quickly.
-The design should say: this is a serious operational tool, not a demo.
+- Potential confusion for new maintainers.
 
-#### `initState()` and stats loading
+Mitigation:
 
-The screen creates its own database manager and attendance module, then loads
-statistics.
+- Keep this codebook and index explicit about active persistence path.
+- If drift is truly retired, remove related packages/files in a dedicated cleanup PR.
 
-That is good because the home screen needs current counts every time it opens.
+### 11.2 Legacy/unrouted screen still in tree
 
-#### Statistics row
+Risk:
 
-The stats chips show:
+- `home_screen.dart` may be edited accidentally even though app starts at `home_dashboard_screen.dart`.
 
-- total students,
-- present today,
-- total sessions.
+Mitigation:
 
-These are the most useful summary numbers for a teacher at a glance.
+- Treat route table in `main.dart` as canonical.
 
-#### Featured cards
+### 11.3 Export path behavior differs across platforms
 
-The large cards for Enroll and Attendance are the primary actions.
+Risk:
 
-That is a good UI choice because the app has two main workflows and those
-should be visually dominant.
+- Android external storage and media-store behavior can vary by device/OS.
 
-#### Tool grid
+Mitigation:
 
-The smaller cards expose Expression, Export, Settings, and Database.
+- Continue using `getExportDirectory()` as source of truth.
+- Keep fallback to app documents directory.
 
-That is good because secondary tools should remain accessible but not compete
-with the main attendance workflow.
+### 11.4 Emotion assets mismatch confusion
 
-#### Visual style
+Risk:
 
-The layered shadows, gradients, and raised treatment are intentional. They make
-the buttons feel physical and tappable, which helps a dashboard-style app feel
-finished.
+- Repository includes training artifacts (`.pkl`) that are not directly loaded by app runtime.
 
-### [lib/screens/enrollment_screen.dart](lib/screens/enrollment_screen.dart)
+Mitigation:
 
-This screen collects the student identity and face samples.
+- Keep `models/README.md` and this codebook clear on which assets are runtime-critical.
 
-#### Controllers and fields
+### 11.5 Performance under high enrollment sizes
 
-The name, roll number, class, age, phone, and gender fields are all separate.
+Risk:
 
-That is good because enrollment data is structured. If you separated them later,
-you would lose clarity and make validation harder.
+- Matching cost grows with total stored embeddings.
 
-#### Camera setup
+Mitigation:
 
-The screen requests camera permission, enumerates available cameras, and prefers
-the front camera.
+- Use embedding-quality enrollment and duplicate control.
+- Consider indexing or vector DB strategy if data scale grows significantly.
 
-That is a good enrollment choice because the front camera usually makes it
-easier for a person to center their face while entering data.
+---
 
-#### Brightness boost
+## 12. How To Change This System Safely
 
-The screen can increase application brightness on the front camera.
+### 12.1 Changing recognition behavior
 
-That is a practical mobile UX improvement because face capture often happens in
-indoor or low-light conditions.
+Prefer changing in this order:
 
-#### Sample capture loop
+1. Attendance screen thresholds/gates for runtime behavior.
+2. `m3_face_matching.dart` if generic matcher logic must evolve.
+3. Constants for shared defaults.
 
-The screen captures multiple embeddings instead of only one.
+Always validate with:
 
-This is a strong design decision. Multiple samples reduce the risk of a bad
-single capture dominating the student template.
+- known students,
+- unknown faces,
+- similar-looking subjects,
+- low-light conditions.
 
-#### Why medium resolution
+### 12.2 Changing expression behavior
 
-The enrollment camera uses medium resolution to balance quality and speed.
+1. Adjust calibration JSON values first.
+2. Only edit cue-model formulas if calibration is insufficient.
+3. Validate both attendance and standalone expression screens.
 
-That is a good trade-off because enrollment should be reliable but should not
-make the app sluggish or memory-heavy.
+### 12.3 Changing storage schema
 
-### [lib/screens/attendance_prep_screen.dart](lib/screens/attendance_prep_screen.dart)
+1. Update model serializers.
+2. Update `DatabaseManager` read/write paths.
+3. Update backup/restore merge logic.
+4. Add one-time migration logic if old keys/fields are impacted.
 
-This screen is the gate before live attendance starts.
+---
 
-#### Why this screen exists
+## 13. Verification Checklist For Maintainers
 
-It collects teacher and subject context before opening the scanner.
+Before release:
 
-That is good because attendance should always be attached to a class context,
-not recorded as anonymous face matches.
+1. App launches and routes correctly from `/`.
+2. Enrollment captures at least 10 valid samples.
+3. Attendance marks known users and rejects unknown users.
+4. Attendance submission creates both attendance rows and teacher session rows.
+5. Export screen writes and shares CSV files.
+6. Settings backup + restore succeeds on real data.
+7. Expression detection screen runs and overlays labels without crash.
+8. No stale doc links exist in `README.md` or `DOCUMENTATION_INDEX.md`.
 
-#### Subject selection
+---
 
-The screen loads existing subjects and lets the user create a new one.
+## 14. Final Notes
 
-This is useful because classes change, but the app should still normalize how
-subject data is stored.
-
-#### Navigation behavior
-
-After validation, the screen pushes to `AttendanceScreen` with the teacher and
-subject.
-
-That is clean because the scanner does not need to ask for class metadata again.
-
-### [lib/screens/attendance_screen.dart](lib/screens/attendance_screen.dart)
-
-This is the most important runtime screen in the app.
-
-It does real-time attendance detection, matching, confirmation, and local
-recording.
-
-#### High-level responsibilities
-
-The screen does all of the following:
-
-- initializes camera and detection modules,
-- loads enrolled students and embeddings,
-- starts live image streaming automatically,
-- detects faces in each frame,
-- generates embeddings,
-- matches faces to known students,
-- confirms attendance with cooldown and consecutive detection rules,
-- speaks confirmation aloud,
-- stores emotion context,
-- paints overlays on top of the camera feed.
-
-That is a lot of work, so the internal structure matters.
-
-#### Why live image streaming is used
-
-The screen uses live image stream processing instead of repeated shutter-style
-captures.
-
-That is a better choice because:
-
-- it keeps the preview smoother,
-- it reduces visible pauses,
-- it is more natural for scanning multiple people,
-- it avoids repeatedly interrupting the camera pipeline.
-
-#### `initState()` and `_initialize()`
-
-Initialization creates all of the dependencies once:
-
-- database manager,
-- TTS engine,
-- face detector,
-- embedding module,
-- shared emotion model,
-- student records,
-- student embeddings,
-- KNN training set.
-
-That is good because the screen should be ready before scanning starts.
-
-#### Loading embeddings
-
-The screen loads every enrolled student’s embeddings into memory.
-
-That is an acceptable choice because the app is offline and the data size is
-small enough for local vector matching.
-
-#### `_rebuildKnnTrainingSet()`
-
-This creates the in-memory set of samples used for matching.
-
-That is useful because repeated matching should not repeatedly rebuild the same
-lists from storage.
-
-#### Camera initialization
-
-The screen requests camera permission, chooses a preferred camera, and sets up
-the controller.
-
-The preferred choice is the front camera, which is usually better for face
-attendance because users naturally face it.
-
-#### Medium resolution for attendance
-
-The attendance screen also uses medium resolution.
-
-That is a deliberate trade-off between accuracy and speed. High resolution can
-make live scanning heavy without adding enough practical benefit.
-
-#### Automatic scanning
-
-The scanner starts automatically once the camera is ready.
-
-That is a better UX than forcing the user to tap a second scan button, because
-attendance should begin as soon as the session is open.
-
-#### Stream throttling
-
-The image stream is throttled with a scan interval.
-
-That is a good performance safeguard because the app should not process every
-single frame if doing so would overload the device.
-
-#### `_processLiveFrame()`
-
-This converts the camera image, rotates it to the sensor orientation, converts
-it to JPEG bytes, and sends it to the face detector.
-
-That pipeline is good because each step has a single responsibility:
-
-- raw camera format to image buffer,
-- orientation correction,
-- detection-ready bytes,
-- face detection,
-- attendance logic.
-
-#### Face filtering
-
-Faces smaller than a minimum size are ignored.
-
-That is important because very small faces produce poor embeddings and noisy
-emotion signals.
-
-#### Per-face processing
-
-Each face is processed independently.
-
-That is the correct design for classroom or group attendance because multiple
-people may appear in the same frame.
-
-#### Attendance confirmation logic
-
-The screen does not mark attendance on one noisy frame.
-
-Instead it uses:
-
-- consecutive detections,
-- cooldown timing,
-- similarity threshold checks,
-- stage-2 verification against stored embeddings,
-- ambiguity rejection when the top candidates are too close.
-
-This is good engineering because face matching is probabilistic. A real app
-should resist false positives rather than trying to be over-eager.
-
-#### TTS confirmation
-
-When attendance is marked, the app can speak the student name.
-
-That is a useful accessibility and feedback feature because users hear a clear
-confirmation rather than wondering whether the scan succeeded.
-
-#### Emotion capture at mark time
-
-The screen stores the current emotion for the student when attendance is marked.
-
-That is a nice extra because it lets the record carry context without changing
-the main attendance logic.
-
-#### Overlay rendering
-
-The overlay arrays store face rectangles, names, colors, and emotions.
-
-That keeps rendering separate from recognition. Recognition decides what is true;
-the overlay only visualizes the decision.
-
-### [lib/screens/expression_detection_screen.dart](lib/screens/expression_detection_screen.dart)
-
-This screen is a live expression lab. It is separate from attendance so emotion
-research does not interfere with attendance marking.
-
-#### Why it uses a separate screen
-
-Separation is good here because emotion detection and attendance have different
-goals:
-
-- attendance cares about identity,
-- this screen cares about expression classification,
-- each workflow deserves its own tuning and UI.
-
-#### Live stream + throttling
-
-Like attendance, this screen uses live streaming with a controlled scan rate.
-
-That is good because facial-expression UX feels much better when preview motion
-is continuous.
-
-#### Warmup period
-
-The screen waits briefly after start before making decisions.
-
-That is good because camera exposure, face detection, and model state can be
-unstable in the first second.
-
-#### Emotion pipeline
-
-The screen detects faces, filters out tiny ones, evaluates the cue model, and
-then stabilizes the result.
-
-That is a good structure because the app does not blindly trust a single frame.
-
-#### Expression overrides
-
-The code applies conservative overrides for edge cases such as wide-open eyes
-and ambiguous mouth shapes.
-
-That is a pragmatic choice because cue-based emotion systems can over-trigger if
-one cue dominates too strongly.
-
-#### Why the model is rule-based
-
-The expression model is not a learned deep classifier in this project. It is a
-cue-scored decision system.
-
-That is good here because:
-
-- the app already runs on-device,
-- it is easier to explain,
-- it is easier to tune by hand,
-- it can be adjusted without retraining a model.
-
-#### Overlay and log
-
-The screen paints face boxes and expression labels, and it keeps a rolling log
-of recognized states.
-
-That makes the screen useful as both a live demo and a debugging tool.
-
-### [lib/screens/database_screen.dart](lib/screens/database_screen.dart)
-
-This screen is the reporting dashboard.
-
-#### Why it exists
-
-It answers the question: what happened after all the scanning?
-
-That is why it shows:
-
-- summary statistics,
-- attendance history by date,
-- per-student attendance,
-- enrolled student records.
-
-#### Snapshot-based calculation
-
-The screen builds an attendance snapshot from students and all attendance
-records.
-
-That is a good architectural choice because it centralizes reporting logic and
-prevents each UI tile from querying the database separately.
-
-#### Why the dashboard was rewritten
-
-The current implementation fixes the statistics so the overview, enrolled list,
-and history all come from the same snapshot.
-
-That is better than mixing ad hoc calculations because it keeps the counts
-consistent across the page.
-
-#### Attendance history grouping
-
-Records are grouped by date and deduplicated per student per date, with the most
-recent record winning.
-
-That is the correct choice because attendance should reflect the final state for
-that day, not every intermediate duplicate scan.
-
-#### Percentage logic
-
-The student percentage is calculated as present divided by total classes.
-
-That is a sensible attendance metric because it answers the real question: how
-often was this student marked present across all recorded sessions?
-
-#### UI contrast
-
-The cards are intentionally dark with light text.
-
-That works because the app theme is dark and camera-centric, and high contrast
-improves readability.
-
-#### Delete student behavior
-
-Deleting a student also removes their embeddings.
-
-That is good data hygiene because orphan embeddings would otherwise pollute the
-matching pool.
-
-### [lib/screens/export_screen.dart](lib/screens/export_screen.dart)
-
-This screen handles export and file management.
-
-#### Why export is a separate screen
-
-Keeping export in its own screen is good because reporting is a distinct admin
-task. It should not clutter the attendance or home flow.
-
-#### Export directory
-
-The screen uses a shared export directory helper.
-
-That is good because all exported files end up in the same predictable place.
-
-#### Saved files list
-
-The screen scans the export directory and displays saved CSV and JSON files.
-
-That is practical because users can see what already exists before generating or
-sharing anything new.
-
-#### Share and delete
-
-Sharing and deleting exported files from the app is convenient and reduces the
-need to use a file manager.
-
-#### Why fixed attendance filenames are useful
-
-The general attendance export uses a stable file name.
-
-That is good for administrators because the latest register is easy to find and
-does not create a clutter of near-duplicate filenames.
-
-### [lib/screens/settings_screen.dart](lib/screens/settings_screen.dart)
-
-This is the control room of the app.
-
-#### Why settings exists
-
-The app has enough operational features that it needs a place for backup,
-restore, toggles, and system info.
-
-#### Settings data summary
-
-The screen counts students, embeddings, attendance, subjects, sessions, and
-approximate data size.
-
-That is good because it tells the user how much the local database contains.
-
-#### TTS toggle
-
-Speech feedback can be enabled or disabled.
-
-That is a good usability choice because some users want spoken feedback and
-others want silent operation.
-
-#### Backup and restore
-
-The app can export the SharedPreferences data into a JSON backup and restore it
-later.
-
-That is essential in an offline-first app because there is no backend copy of
-the data.
-
-#### Why file picker is used
-
-Restoring from a file picker is the right approach because the user should be
-able to choose a specific backup file from storage.
-
-## 7. Runtime Flow
-
-The app’s full behavior can be reconstructed as a pipeline:
-
-1. `main.dart` starts the app and initializes storage.
-2. `HomeScreen` loads summary stats and offers navigation.
-3. `EnrollmentScreen` captures students and saves embeddings.
-4. `AttendancePrepScreen` selects teacher and subject context.
-5. `AttendanceScreen` scans live faces and marks attendance.
-6. `DatabaseScreen` summarizes attendance history and enrolled students.
-7. `ExportScreen` writes CSV/JSON files and shares them.
-8. `SettingsScreen` backs up, restores, and configures the app.
-
-That flow is good because it matches a real operational workflow instead of a
-toy demo.
-
-## 8. Why This Architecture Works
-
-### Offline-first design
-
-The app does not need a server to function. That is a major strength.
-
-Benefits:
-
-- less latency,
-- fewer failure points,
-- better privacy,
-- easier field deployment,
-- usable in poor connectivity environments.
-
-### Separation of concerns
-
-The code is split into bootstrap, storage, ML, and screen layers.
-
-That is good because each layer changes for a different reason.
-
-### Local embeddings instead of cloud identity
-
-Face embeddings stored locally are compact and efficient.
-
-That is a good fit because the app’s audience is likely using a single device or
-a small local workflow, not a large centralized identity system.
-
-### KNN-style matching instead of a trainable classifier
-
-This is a practical decision.
-
-Why it is good:
-
-- enrollment is immediate,
-- no training pipeline is needed,
-- new students can be added incrementally,
-- the logic is easy to explain and debug.
-
-### Manual confidence rules
-
-The app does not trust one score alone. It uses thresholds, voting, and
-verification.
-
-That is exactly what a robust recognition app should do.
-
-### Dark premium UI
-
-The visual design is not accidental.
-
-It gives the app a serious tool-like look and makes the camera workflow feel
-intentional rather than generic.
-
-## 9. If You Were Rebuilding This App
-
-If someone were rebuilding the app from scratch, the order should be:
-
-1. Build the storage layer and models.
-2. Build the face detection module.
-3. Build the embedding module.
-4. Build the matching logic.
-5. Build the enrollment screen.
-6. Build the attendance-prep screen.
-7. Build the attendance scanner.
-8. Build the dashboard.
-9. Build export and settings.
-10. Polish the theme and visuals.
-
-That is the safest order because each layer depends on the one below it.
-
-## 10. Repository Notes
-
-The project has also been cleaned to remove obvious stale placeholders and old
-backup files that were not part of the active route flow.
-
-The current active app entry point is [lib/main.dart](lib/main.dart).
-
-The current primary user entry flow is:
-
-- [lib/screens/home_screen.dart](lib/screens/home_screen.dart)
-- [lib/screens/attendance_prep_screen.dart](lib/screens/attendance_prep_screen.dart)
-- [lib/screens/attendance_screen.dart](lib/screens/attendance_screen.dart)
-
-## 11. Short Summary
-
-This app is an offline face recognition attendance system built around:
-
-- camera streaming,
-- face detection,
-- 128D embeddings,
-- Euclidean nearest-neighbor matching,
-- local attendance persistence,
-- dashboard analytics,
-- export and backup support,
-- optional emotion logging.
-
-The codebase is reasonably modular, the visual system is coherent, and the
-offline architecture is a strong fit for attendance use cases.
+This document intentionally prioritizes code-accurate behavior over historical narrative.
+If you make architectural changes, update this codebook in the same PR.
+Keeping documentation synchronized with code is mandatory for this repository to remain maintainable.

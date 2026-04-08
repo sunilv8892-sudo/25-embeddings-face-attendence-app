@@ -1,36 +1,31 @@
-# Face Recognition Attendance System
+# FAS - Face Recognition Attendance System
 
-This repository now includes a detailed codebook instead of only a normal README.
-If you want the deep explanation first, open [FACE_RECOGNITION_CODEBOOK.md](FACE_RECOGNITION_CODEBOOK.md).
+This repository contains the current production architecture of the FAS app:
 
-This app is a fully offline Flutter face-recognition attendance system.
-It enrolls students, stores embeddings locally, scans live camera frames,
-marks attendance, logs emotion context, and exports records without a backend.
+- Flutter mobile application
+- ML Kit face detection (MediaPipe-backed)
+- FaceNet-128 embedding generation with TFLite
+- KNN-style matching with Euclidean distance
+- SharedPreferences-backed local persistence
+- Offline attendance marking, emotion tagging, and CSV export
 
-## Start Here
+## Documentation Entry Points
 
-1. Read [FACE_RECOGNITION_CODEBOOK.md](FACE_RECOGNITION_CODEBOOK.md) for the full architectural walk-through.
-2. Open [lib/main.dart](lib/main.dart) to see the active entry point and route table.
-3. Use [lib/screens/home_screen.dart](lib/screens/home_screen.dart) as the navigation map for the app.
+1. [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)
+2. [FACE_RECOGNITION_CODEBOOK.md](FACE_RECOGNITION_CODEBOOK.md)
 
-## What The Codebook Covers
+Use the index for quick navigation. Use the codebook for deep implementation details.
 
-The codebook explains:
+## Quick Runtime Overview
 
-1. Every active screen and what each widget block is doing.
-2. The recognition pipeline from camera frame to embedding to match.
-3. The storage model and why SharedPreferences is used here.
-4. Why the app uses KNN-style nearest-neighbor matching.
-5. The dashboard logic, export flow, settings flow, and emotion pipeline.
+1. Enroll students and collect multiple face samples.
+2. Generate and store 128-dimensional embeddings per student.
+3. Start attendance session (teacher + subject).
+4. Run live camera scan, detect faces, generate embeddings, perform KNN matching.
+5. Confirm with consecutive detections and write attendance + emotion to local storage.
+6. View stats/dashboard and export CSV/JSON reports.
 
-## Active Entry Points
+## Source Of Truth
 
-- [lib/main.dart](lib/main.dart)
-- [lib/screens/home_screen.dart](lib/screens/home_screen.dart)
-- [lib/screens/attendance_prep_screen.dart](lib/screens/attendance_prep_screen.dart)
-- [lib/screens/attendance_screen.dart](lib/screens/attendance_screen.dart)
-
-## Note
-
-The earlier long README has been replaced by the codebook so the project can
-serve as a teaching document as well as an app repository.
+This README and the codebook are the authoritative docs for the active code in `lib/`.
+Legacy historical migration/refactoring markdown files were intentionally removed to avoid conflicting guidance.
