@@ -14,11 +14,14 @@ class AttendancePrepScreen extends StatefulWidget {
 
 class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
   late DatabaseManager _dbManager;
-  final _teacherNameController = TextEditingController();
+  final _newTeacherController = TextEditingController();
   final _newSubjectController = TextEditingController();
-  
+
+  List<String> _teacherNames = [];
+  String? _selectedTeacherName;
   List<Subject> _subjects = [];
   Subject? _selectedSubject;
+  bool _isCreatingNewTeacher = false;
   bool _isCreatingNewSubject = false;
   bool _isLoading = true;
 
@@ -32,15 +35,16 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
     try {
       _dbManager = DatabaseManager();
       await _dbManager.database;
+      await _loadTeacherNames();
       await _loadSubjects();
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint('Init error: $e');
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -61,6 +65,65 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
     }
   }
 
+  Future<void> _loadTeacherNames() async {
+    try {
+      final teacherNames = await _dbManager.getAllTeacherNames();
+      if (mounted) {
+        setState(() {
+          _teacherNames = teacherNames;
+          if (_teacherNames.isNotEmpty) {
+            _selectedTeacherName = _teacherNames.first;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading teacher names: $e');
+    }
+  }
+
+  Future<void> _createNewTeacher(String name) async {
+    if (name.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a teacher name')),
+      );
+      return;
+    }
+
+    try {
+      final teacherName = await _dbManager.getOrCreateTeacherName(name.trim());
+
+      if (mounted) {
+        setState(() {
+          if (!_teacherNames.any(
+            (savedName) => savedName.toLowerCase() == teacherName.toLowerCase(),
+          )) {
+            _teacherNames.add(teacherName);
+            _teacherNames.sort(
+              (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+            );
+          }
+          _selectedTeacherName = teacherName;
+          _isCreatingNewTeacher = false;
+          _newTeacherController.clear();
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✓ Teacher saved'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error creating teacher: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
   Future<void> _createNewSubject(String name) async {
     if (name.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -71,7 +134,7 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
 
     try {
       final newSubject = await _dbManager.getOrCreateSubject(name.trim());
-      
+
       if (mounted) {
         setState(() {
           if (!_subjects.any((s) => s.id == newSubject.id)) {
@@ -81,7 +144,7 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
           _isCreatingNewSubject = false;
           _newSubjectController.clear();
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✓ Subject created'),
@@ -92,19 +155,19 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
     } catch (e) {
       debugPrint('Error creating subject: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
 
   void _proceed() {
-    final teacherName = _teacherNameController.text.trim();
-    
+    final teacherName = _selectedTeacherName?.trim() ?? '';
+
     if (teacherName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter teacher name')),
+        const SnackBar(content: Text('Please select or create teacher name')),
       );
       return;
     }
@@ -129,7 +192,7 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
 
   @override
   void dispose() {
-    _teacherNameController.dispose();
+    _newTeacherController.dispose();
     _newSubjectController.dispose();
     super.dispose();
   }
@@ -159,44 +222,132 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
             // Header
             Text(
               'Teacher Information',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
 
-            // Teacher Name Field
+            // Teacher Name
             const Text(
               'Teacher Name',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _teacherNameController,
-              decoration: InputDecoration(
-                hintText: 'Enter your name',
-                filled: true,
-                fillColor: AppConstants.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppConstants.cardBorder),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppConstants.cardBorder),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppConstants.primaryColor,
-                    width: 2,
+            if (!_isCreatingNewTeacher)
+              Column(
+                children: [
+                  if (_teacherNames.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppConstants.inputFill,
+                        border: Border.all(color: AppConstants.cardBorder),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _selectedTeacherName,
+                        isExpanded: true,
+                        underline: const SizedBox(),
+                        items: _teacherNames
+                            .map(
+                              (name) => DropdownMenuItem(
+                                value: name,
+                                child: Text(
+                                  name,
+                                  style: const TextStyle(
+                                    color: AppConstants.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            _selectedTeacherName = newValue;
+                          });
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _isCreatingNewTeacher = true;
+                        });
+                      },
+                      icon: const Icon(Icons.person_add),
+                      label: const Text('Create New Teacher Name'),
+                    ),
                   ),
-                ),
-                prefixIcon: const Icon(Icons.person),
-                hintStyle: const TextStyle(color: AppConstants.textSecondary),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  TextField(
+                    controller: _newTeacherController,
+                    decoration: InputDecoration(
+                      hintText: 'Enter teacher name',
+                      filled: true,
+                      fillColor: AppConstants.inputFill,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: AppConstants.cardBorder,
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: AppConstants.cardBorder,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: AppConstants.primaryColor,
+                          width: 2,
+                        ),
+                      ),
+                      prefixIcon: const Icon(Icons.person),
+                      hintStyle: const TextStyle(
+                        color: AppConstants.textSecondary,
+                      ),
+                    ),
+                    style: const TextStyle(color: AppConstants.textPrimary),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            _createNewTeacher(_newTeacherController.text);
+                          },
+                          icon: const Icon(Icons.check),
+                          label: const Text('Create'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _isCreatingNewTeacher = false;
+                              _newTeacherController.clear();
+                            });
+                          },
+                          icon: const Icon(Icons.close),
+                          label: const Text('Cancel'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              style: const TextStyle(color: AppConstants.textPrimary),
-            ),
             const SizedBox(height: 24),
 
             // Subject Header
@@ -224,15 +375,17 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
                         isExpanded: true,
                         underline: const SizedBox(),
                         items: _subjects
-                            .map((subject) => DropdownMenuItem(
-                              value: subject,
-                              child: Text(
-                                subject.name,
-                                style: const TextStyle(
-                                  color: AppConstants.textPrimary,
+                            .map(
+                              (subject) => DropdownMenuItem(
+                                value: subject,
+                                child: Text(
+                                  subject.name,
+                                  style: const TextStyle(
+                                    color: AppConstants.textPrimary,
+                                  ),
                                 ),
                               ),
-                            ))
+                            )
                             .toList(),
                         onChanged: (Subject? newValue) {
                           setState(() {
@@ -269,11 +422,15 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
                       fillColor: AppConstants.inputFill,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppConstants.cardBorder),
+                        borderSide: const BorderSide(
+                          color: AppConstants.cardBorder,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppConstants.cardBorder),
+                        borderSide: const BorderSide(
+                          color: AppConstants.cardBorder,
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -283,7 +440,9 @@ class _AttendancePrepScreenState extends State<AttendancePrepScreen> {
                         ),
                       ),
                       prefixIcon: const Icon(Icons.subject),
-                      hintStyle: const TextStyle(color: AppConstants.textSecondary),
+                      hintStyle: const TextStyle(
+                        color: AppConstants.textSecondary,
+                      ),
                     ),
                     style: const TextStyle(color: AppConstants.textPrimary),
                   ),

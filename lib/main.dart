@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'database/database_manager.dart';
-import 'screens/home_screen.dart';
+import 'screens/home_dashboard_screen.dart';
 import 'screens/enrollment_screen.dart';
 import 'screens/attendance_prep_screen.dart';
 import 'screens/database_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/expression_detection_screen.dart';
+import 'utils/app_route_observer.dart';
 import 'utils/constants.dart';
 
 late DatabaseManager _dbManager;
@@ -30,12 +31,13 @@ class FaceRecognitionApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: AppConstants.appName,
       theme: AppTheme.lightTheme,
+      navigatorObservers: [appRouteObserver],
       builder: (context, child) {
         return child ?? const SizedBox.shrink();
       },
       initialRoute: AppConstants.routeHome,
       routes: {
-        AppConstants.routeHome: (context) => const HomeScreen(),
+        AppConstants.routeHome: (context) => const HomeDashboardScreen(),
         AppConstants.routeEnroll: (context) => const EnrollmentScreen(),
         AppConstants.routeAttendance: (context) => const AttendancePrepScreen(),
         AppConstants.routeDatabase: (context) => const DatabaseScreen(),

@@ -85,7 +85,7 @@ flutter:
   assets:
     - assets/models/
     - assets/lottie/success.json
-    - assets/icons/vision_id.png
+    - assets/icons/
 
 flutter_icons:
   android: true

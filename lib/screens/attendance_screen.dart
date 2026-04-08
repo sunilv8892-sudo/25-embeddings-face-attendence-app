@@ -1143,27 +1143,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
       await prefs.setString(sessionKey, jsonEncode(sessionPayload));
 
-      final existingSessions = await _dbManager.getTeacherSessionsByDate(
-        _attendanceDate!,
+      await _dbManager.insertTeacherSession(
+        TeacherSession(
+          id: DateTime.now().microsecondsSinceEpoch,
+          teacherName: widget.teacherName,
+          subjectId: subjectId,
+          subjectName: widget.subject.name,
+          date: _attendanceDate!,
+          createdAt: DateTime.now(),
+        ),
       );
-      final alreadySaved = existingSessions.any(
-        (session) =>
-            session.subjectId == subjectId &&
-            session.teacherName.toLowerCase() ==
-                widget.teacherName.toLowerCase(),
-      );
-      if (!alreadySaved) {
-        await _dbManager.insertTeacherSession(
-          TeacherSession(
-            id: DateTime.now().millisecondsSinceEpoch,
-            teacherName: widget.teacherName,
-            subjectId: subjectId,
-            subjectName: widget.subject.name,
-            date: _attendanceDate!,
-            createdAt: DateTime.now(),
-          ),
-        );
-      }
       debugPrint('✅ Attendance submitted for $submitted students');
 
       // Auto-generate CSV file (MUST complete before showing dialog)

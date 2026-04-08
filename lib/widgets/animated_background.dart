@@ -1,12 +1,17 @@
-import 'package:flutter/material.dart';
-// removed unused import ../utils/constants.dart
+import 'dart:math' as math;
 
-/// AnimatedBackground with a subtle animated mesh gradient
+import 'package:flutter/material.dart';
+
+/// AnimatedBackground with a lightweight moving glow layer.
 class AnimatedBackground extends StatefulWidget {
   final Widget child;
   final bool isOverlay;
 
-  const AnimatedBackground({super.key, required this.child, this.isOverlay = true});
+  const AnimatedBackground({
+    super.key,
+    required this.child,
+    this.isOverlay = true,
+  });
 
   @override
   State<AnimatedBackground> createState() => _AnimatedBackgroundState();
@@ -20,7 +25,7 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(seconds: 12),
+      duration: const Duration(seconds: 18),
       vsync: this,
     )..repeat(reverse: true);
   }
@@ -36,25 +41,111 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        final t = _controller.value;
-        return Container(
-          decoration: BoxDecoration(
+        final t = Curves.easeInOut.transform(_controller.value);
+
+        return DecoratedBox(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment(-1.0 + t * 0.6, -1.0),
-              end: Alignment(1.0 - t * 0.6, 1.0),
-              colors: const [
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF050B16),
                 Color(0xFF0D1B2A),
-                Color(0xFF1B2A49),
-                Color(0xFF0F2040),
-                Color(0xFF0D1B2A),
+                Color(0xFF111C33),
+                Color(0xFF070D1A),
               ],
-              stops: [0.0, 0.3 + t * 0.1, 0.7 - t * 0.1, 1.0],
             ),
           ),
-          child: child,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _buildOrb(
+                alignment: Alignment(-0.95 + t * 0.08, -0.82),
+                size: 240,
+                colors: const [Color(0xFF6C63FF), Color(0xFF00D4FF)],
+                phase: 0.0,
+              ),
+              _buildOrb(
+                alignment: Alignment(0.98 - t * 0.10, -0.68 + t * 0.04),
+                size: 180,
+                colors: const [Color(0xFFFFB830), Color(0xFFFF6A88)],
+                phase: math.pi / 2,
+              ),
+              _buildOrb(
+                alignment: Alignment(-0.10 + t * 0.03, 0.98),
+                size: 220,
+                colors: const [Color(0xFF00D4FF), Color(0xFF00E096)],
+                phase: math.pi,
+              ),
+              if (widget.isOverlay)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: const Alignment(0.0, -0.25),
+                          radius: 1.15,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.04),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned.fill(child: child ?? const SizedBox.shrink()),
+            ],
+          ),
         );
       },
       child: widget.child,
+    );
+  }
+
+  Widget _buildOrb({
+    required Alignment alignment,
+    required double size,
+    required List<Color> colors,
+    required double phase,
+  }) {
+    final t = _controller.value;
+    final floatX = (t * 2 - 1) * 8;
+    final floatY = ((1 - t) * 2 - 1) * 10;
+
+    return Align(
+      alignment: alignment,
+      child: Transform.translate(
+        offset: Offset(floatX, floatY),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                colors.first.withValues(alpha: 0.18),
+                colors.last.withValues(alpha: 0.06),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.55, 1.0],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colors.first.withValues(alpha: 0.22),
+                blurRadius: 58,
+                spreadRadius: 6,
+              ),
+              BoxShadow(
+                color: colors.last.withValues(alpha: 0.12),
+                blurRadius: 72,
+                spreadRadius: 8,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -109,10 +200,7 @@ class GlassContainer extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
-        child: Padding(
-          padding: padding ?? EdgeInsets.zero,
-          child: child,
-        ),
+        child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
       ),
     );
   }

@@ -437,6 +437,90 @@ class DatabaseManager {
     }
   }
 
+  Future<void> insertTeacherName(String teacherName) async {
+    final normalizedName = teacherName.trim();
+    if (normalizedName.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final teacherNames = prefs.getStringList('teacherNames') ?? [];
+    final exists = teacherNames.any(
+      (name) => name.toLowerCase() == normalizedName.toLowerCase(),
+    );
+    if (!exists) {
+      teacherNames.add(normalizedName);
+      await prefs.setStringList('teacherNames', teacherNames);
+    }
+  }
+
+  Future<List<String>> getAllTeacherNames() async {
+    final prefs = await SharedPreferences.getInstance();
+    final teacherNames = prefs.getStringList('teacherNames') ?? [];
+    final sessionJson = prefs.getStringList('teacherSessions') ?? [];
+
+    final mergedNames = <String>[];
+
+    void addName(String? rawName) {
+      final normalizedName = rawName?.trim() ?? '';
+      if (normalizedName.isEmpty) return;
+      final exists = mergedNames.any(
+        (name) => name.toLowerCase() == normalizedName.toLowerCase(),
+      );
+      if (!exists) {
+        mergedNames.add(normalizedName);
+      }
+    }
+
+    for (final name in teacherNames) {
+      addName(name);
+    }
+
+    for (final session in sessionJson) {
+      try {
+        final data = jsonDecode(session) as Map<String, dynamic>;
+        addName(data['teacherName'] as String?);
+      } catch (_) {
+        // Ignore malformed records and continue with valid teacher names.
+      }
+    }
+
+    mergedNames.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    final sortedStored = [...teacherNames]
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final isSameLength = sortedStored.length == mergedNames.length;
+    final hasSameValues =
+        isSameLength &&
+        List.generate(
+          mergedNames.length,
+          (index) =>
+              sortedStored[index].toLowerCase() ==
+              mergedNames[index].toLowerCase(),
+        ).every((same) => same);
+
+    if (!hasSameValues) {
+      await prefs.setStringList('teacherNames', mergedNames);
+    }
+
+    return mergedNames;
+  }
+
+  Future<String> getOrCreateTeacherName(String teacherName) async {
+    final normalizedName = teacherName.trim();
+    if (normalizedName.isEmpty) {
+      throw ArgumentError('Teacher name cannot be empty');
+    }
+
+    final teacherNames = await getAllTeacherNames();
+    for (final name in teacherNames) {
+      if (name.toLowerCase() == normalizedName.toLowerCase()) {
+        return name;
+      }
+    }
+
+    await insertTeacherName(normalizedName);
+    return normalizedName;
+  }
+
   Future<void> insertTeacherSession(model.TeacherSession session) async {
     final prefs = await SharedPreferences.getInstance();
     final sessions = prefs.getStringList('teacherSessions') ?? [];
@@ -451,6 +535,7 @@ class DatabaseManager {
       }),
     );
     await prefs.setStringList('teacherSessions', sessions);
+    await insertTeacherName(session.teacherName);
   }
 
   Future<List<model.TeacherSession>> getAllTeacherSessions() async {

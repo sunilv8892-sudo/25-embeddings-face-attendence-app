@@ -17,6 +17,31 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const _CreditProfile _shivaprasadProfile = _CreditProfile(
+    fullName: 'Shivaprasad D L',
+    title: 'Research Scholar',
+    photoAsset: 'assets/icons/shivaprasad.jpeg',
+    descriptionLines: [
+      'Research Scholar',
+      'Department of Studies in Computer Applications',
+      'University of Mysore',
+      'Assistant Professor',
+      'Department of Computer Applications',
+      'MIT First Grade College, Mysore',
+    ],
+  );
+
+  static const _CreditProfile _sunilProfile = _CreditProfile(
+    fullName: 'V Sunil',
+    title: 'Student',
+    photoAsset: 'assets/icons/sunil.jpeg',
+    descriptionLines: [
+      'Student',
+      'Department of Computer Applications',
+      'MIT First Grade College, Mysore',
+    ],
+  );
+
   // Real stats
   int _totalStudents = 0;
   int _totalEmbeddings = 0;
@@ -768,9 +793,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.all(AppConstants.paddingMedium),
                 child: Column(
                   children: [
-                    _infoRow('Supervised by', 'Shivaprasad D L'),
+                    _creditPersonTile(
+                      label: 'Supervised by',
+                      profile: _shivaprasadProfile,
+                    ),
                     const Divider(height: 1, color: AppConstants.dividerColor),
-                    _infoRow('Developed by', 'V Sunil'),
+                    _creditPersonTile(
+                      label: 'Developed by',
+                      profile: _sunilProfile,
+                    ),
                   ],
                 ),
               ),
@@ -812,7 +843,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
             Center(
               child: Text(
-                '© 2026 FAC',
+                '© 2026 FAS',
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppConstants.textTertiary,
@@ -932,6 +963,184 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _creditPersonTile({
+    required String label,
+    required _CreditProfile profile,
+  }) {
+    return InkWell(
+      onTap: () => _showCreditProfileDialog(profile),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppConstants.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    profile.fullName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppConstants.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Text(
+              'View Card',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppConstants.textTertiary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppConstants.textTertiary,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCreditProfileDialog(_CreditProfile profile) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF111F36),
+                  Color(0xFF172844),
+                  Color(0xFF102238),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: AppConstants.accentColor.withValues(alpha: 0.24),
+                  blurRadius: 20,
+                  spreadRadius: -2,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: Image.asset(
+                    profile.photoAsset,
+                    width: 96,
+                    height: 96,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 96,
+                        height: 96,
+                        decoration: BoxDecoration(
+                          color: AppConstants.inputFill,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: const Icon(
+                          Icons.person,
+                          color: AppConstants.textSecondary,
+                          size: 44,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  profile.fullName,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: AppConstants.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  profile.title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppConstants.accentColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ...profile.descriptionLines.map(
+                  (line) => Padding(
+                    padding: const EdgeInsets.only(bottom: 7),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Icon(
+                            Icons.circle,
+                            size: 6,
+                            color: AppConstants.textTertiary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            line,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppConstants.textSecondary,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1058,4 +1267,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+class _CreditProfile {
+  const _CreditProfile({
+    required this.fullName,
+    required this.title,
+    required this.photoAsset,
+    required this.descriptionLines,
+  });
+
+  final String fullName;
+  final String title;
+  final String photoAsset;
+  final List<String> descriptionLines;
 }
