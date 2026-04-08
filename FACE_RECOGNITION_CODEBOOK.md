@@ -116,7 +116,7 @@ Active routes:
 
 - Offline-first: no backend dependency for normal operation.
 - Predictable local state: JSON-like records in SharedPreferences.
-- Modular ML pipeline: detection, embedding, matching, attendance management, liveness, and expression are separated into modules.
+- Modular ML pipeline: detection, embedding, matching, attendance management, liveness (currently not wired into active attendance runtime), and expression are separated into modules.
 - Mobile UX priority: quick startup, camera-first workflows, and immediate feedback.
 
 ---
@@ -144,7 +144,7 @@ lib/
     m2_face_embedding.dart          # TFLite FaceNet-128 inference
     m3_face_matching.dart           # Generic Euclidean matcher (module-level)
     m4_attendance_management.dart   # Reporting/statistics/export helper logic
-    m5_liveness_detection.dart      # Blink-based liveness checks
+   m5_liveness_detection.dart      # Blink-based liveness checks (module present, not wired in active runtime)
     expression_cue_model.dart       # Cue-based expression inference
     expression_cue_calibration.dart # Calibration load/defaults for expression model
   screens/
@@ -324,6 +324,12 @@ Primary responsibilities:
 3. Export attendance and embedding CSV outputs.
 
 ### 6.5 M5 - Liveness (`m5_liveness_detection.dart`)
+
+Status:
+
+- Module implementation exists in codebase.
+- Not currently invoked by the active attendance/enrollment runtime path.
+- Treated as prepared capability for future anti-spoof integration.
 
 Primary responsibilities:
 
@@ -530,6 +536,8 @@ Stabilization controls:
 - Attendance stream scan period: `400ms`
 
 ### 9.2 Liveness values
+
+Status: documented module defaults only (not enforced in active attendance runtime).
 
 - EAR blink threshold: `0.3`
 - Required blinks: `2`
