@@ -726,7 +726,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       builder: (dialogContext) => AlertDialog(
         title: const Text('About FAS'),
         content: const Text(
-          'AI-powered face recognition system for seamless attendance tracking. Works completely offline with high accuracy and real-time detection.\n\nSupervised by: Shivaprasad D L\nDeveloped by: V Sunil',
+          'AI-powered face recognition system for seamless attendance tracking. Works completely offline with high accuracy and real-time detection.\n\nSupervision: Dr. D S Guru\nModelling: Shivaprasad D L\nDeveloper: V Sunil',
         ),
         actions: [
           TextButton(

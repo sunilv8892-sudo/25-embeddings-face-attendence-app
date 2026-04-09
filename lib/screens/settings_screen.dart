@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -17,29 +18,42 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const _CreditProfile _guruProfile = _CreditProfile(
+    fullName: 'Dr. D S Guru',
+    title: 'Senior Professor',
+    photoAsset: 'assets/icons/guru.jpeg',
+    descriptionLines: [
+      'Senior Professor',
+      'Department of Studies in Computer Science',
+      'Manasagangotri, University of Mysore, Mysuru',
+      'Email: dsg@compsci.uni-mysore.ac.in',
+    ],
+    frostyGlass: true,
+  );
+
   static const _CreditProfile _shivaprasadProfile = _CreditProfile(
     fullName: 'Shivaprasad D L',
     title: 'Research Scholar',
     photoAsset: 'assets/icons/shivaprasad.jpeg',
     descriptionLines: [
       'Research Scholar',
-      'Department of Studies in Computer Applications',
-      'University of Mysore',
-      'Assistant Professor',
-      'Department of Computer Applications',
-      'MIT First Grade College, Mysore',
+      'Department of Studies in Computer Science',
+      'Manasagangotri, University of Mysore, Mysuru',
+      'Email: shivaprasaddl143@gmail.com',
     ],
+    frostyGlass: true,
   );
 
   static const _CreditProfile _sunilProfile = _CreditProfile(
     fullName: 'V Sunil',
-    title: 'Student',
+    title: 'Developer',
     photoAsset: 'assets/icons/sunil.jpeg',
     descriptionLines: [
-      'Student',
-      'Department of Computer Applications',
-      'MIT First Grade College, Mysore',
+      'Developer',
+      'MIT First Grade College, Mysuru',
+      'Email: sunil.v8892@gmail.com',
     ],
+    frostyGlass: true,
   );
 
   // Real stats
@@ -1032,12 +1046,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   children: [
                     _creditPersonTile(
-                      label: 'Supervised by',
+                      label: 'Supervision',
+                      profile: _guruProfile,
+                    ),
+                    const Divider(height: 1, color: AppConstants.dividerColor),
+                    _creditPersonTile(
+                      label: 'Modelling',
                       profile: _shivaprasadProfile,
                     ),
                     const Divider(height: 1, color: AppConstants.dividerColor),
                     _creditPersonTile(
-                      label: 'Developed by',
+                      label: 'Developer',
                       profile: _sunilProfile,
                     ),
                   ],
@@ -1263,118 +1282,129 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) {
+        final cardBody = Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xBBDDF3FF),
+                Color(0xA8BFE7FF),
+                Color(0x9ACDEBFF),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.45),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF74B6E8).withValues(alpha: 0.30),
+                blurRadius: 24,
+                spreadRadius: -2,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Image.asset(
+                  profile.photoAsset,
+                  width: 96,
+                  height: 96,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        color: AppConstants.inputFill,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Icon(
+                        Icons.person,
+                        color: AppConstants.textSecondary,
+                        size: 44,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                profile.fullName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: AppConstants.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                profile.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppConstants.accentColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              ...profile.descriptionLines.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Icon(
+                          Icons.circle,
+                          size: 6,
+                          color: AppConstants.textTertiary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          line,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppConstants.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        );
+
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF111F36),
-                  Color(0xFF172844),
-                  Color(0xFF102238),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: AppConstants.accentColor.withValues(alpha: 0.24),
-                  blurRadius: 20,
-                  spreadRadius: -2,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: Image.asset(
-                    profile.photoAsset,
-                    width: 96,
-                    height: 96,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        width: 96,
-                        height: 96,
-                        decoration: BoxDecoration(
-                          color: AppConstants.inputFill,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: const Icon(
-                          Icons.person,
-                          color: AppConstants.textSecondary,
-                          size: 44,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  profile.fullName,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppConstants.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  profile.title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppConstants.accentColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                ...profile.descriptionLines.map(
-                  (line) => Padding(
-                    padding: const EdgeInsets.only(bottom: 7),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.only(top: 6),
-                          child: Icon(
-                            Icons.circle,
-                            size: 6,
-                            color: AppConstants.textTertiary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            line,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppConstants.textSecondary,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Close'),
-                  ),
-                ),
-              ],
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: cardBody,
             ),
           ),
         );
@@ -1513,10 +1543,12 @@ class _CreditProfile {
     required this.title,
     required this.photoAsset,
     required this.descriptionLines,
+    this.frostyGlass = false,
   });
 
   final String fullName;
   final String title;
   final String photoAsset;
   final List<String> descriptionLines;
+  final bool frostyGlass;
 }

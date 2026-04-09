@@ -853,7 +853,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => AlertDialog(
         title: const Text('About FAS'),
         content: const Text(
-          'AI-powered face recognition system for seamless attendance tracking. Works completely offline with high accuracy and real-time detection.\n\nSupervised by: Shivaprasad D L\nDeveloped by: V Sunil',
+          'AI-powered face recognition system for seamless attendance tracking. Works completely offline with high accuracy and real-time detection.\n\nSupervision: Dr. D S Guru\nModelling: Shivaprasad D L\nDeveloper: V Sunil',
         ),
         actions: [
           TextButton(
@@ -1739,7 +1739,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => AlertDialog(
         title: const Text('About FAS'),
         content: const Text(
-          'AI-powered face recognition system for seamless attendance tracking. Works completely offline with high accuracy and real-time detection.\n\nSupervised by: Shivaprasad D L\nDeveloped by: V Sunil',
+          'AI-powered face recognition system for seamless attendance tracking. Works completely offline with high accuracy and real-time detection.\n\nSupervision: Dr. D S Guru\nModelling: Shivaprasad D L\nDeveloper: V Sunil',
         ),
         actions: [
           TextButton(
@@ -3210,8 +3210,9 @@ class HomeScreen extends StatefulWidget {
         content: const Text(
           'AI-powered face recognition system for seamless attendance tracking. '
           'Works completely offline with high accuracy and real-time detection.\n\n'
-          'Supervised by: Shivaprasad D L\n'
-          'Developed by: V Sunil',
+          'Supervision: Dr. D S Guru\n'
+          'Modelling: Shivaprasad D L\n'
+          'Developer: V Sunil',
         ),
         actions: [
           TextButton(
