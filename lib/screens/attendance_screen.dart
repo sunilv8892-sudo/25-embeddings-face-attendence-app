@@ -206,7 +206,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
       _currentCamera = _availableCameras.first;
       final preferredCamera = _availableCameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
+        (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => _availableCameras.first,
       );
       await _initCameraFor(preferredCamera);

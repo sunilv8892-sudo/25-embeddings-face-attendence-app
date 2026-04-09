@@ -145,7 +145,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       if (_availableCameras.isEmpty) return;
 
       final preferredCamera = _availableCameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
+        (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => _availableCameras.first,
       );
       await _initCameraFor(preferredCamera);

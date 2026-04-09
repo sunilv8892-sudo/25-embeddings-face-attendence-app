@@ -285,19 +285,226 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _mergeFromFile() async {
+    int asInt(dynamic value, {int fallback = 0}) {
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? fallback;
+      return fallback;
+    }
+
+    String normalizeText(dynamic value) {
+      return (value as String? ?? '').trim().toLowerCase();
+    }
+
+    int readStudentId(Map<String, dynamic> map) {
+      return asInt(map['studentId'] ?? map['student_id']);
+    }
+
+    Map<String, dynamic> normalizeEmbeddingMap(Map<String, dynamic> source) {
+      final map = Map<String, dynamic>.from(source);
+      final studentId = readStudentId(map);
+      final captureRaw = map['captureDate'] ?? map['capture_date'];
+
+      List<double> vector;
+      final vectorRaw = map['vector'];
+      if (vectorRaw is List) {
+        vector = vectorRaw
+            .map((e) => (e is num) ? e.toDouble() : double.tryParse('$e'))
+            .whereType<double>()
+            .toList();
+      } else if (vectorRaw is String) {
+        vector = vectorRaw
+            .split(RegExp(r'[;,]'))
+            .map((e) => double.tryParse(e.trim()))
+            .whereType<double>()
+            .toList();
+      } else {
+        vector = <double>[];
+      }
+
+      final captureDate = DateTime.tryParse('${captureRaw ?? ''}') ?? DateTime.now();
+
+      map['studentId'] = studentId;
+      map['captureDate'] = captureDate.toIso8601String();
+      map['vector'] = vector;
+      map.remove('student_id');
+      map.remove('capture_date');
+      return map;
+    }
+
+    Map<String, dynamic> normalizeAttendanceMap(Map<String, dynamic> source) {
+      final map = Map<String, dynamic>.from(source);
+      final studentId = readStudentId(map);
+      final recordedRaw = map['recordedAt'] ?? map['recorded_at'];
+      final recordedAt = DateTime.tryParse('${recordedRaw ?? ''}') ?? DateTime.now();
+
+      map['studentId'] = studentId;
+      map['recordedAt'] = recordedAt.toIso8601String();
+      map['status'] = (map['status'] as String? ?? 'absent').trim().isEmpty
+          ? 'absent'
+          : map['status'];
+      map.remove('student_id');
+      map.remove('recorded_at');
+      return map;
+    }
+
+    List<String> parseCsvLine(String line) {
+      final fields = <String>[];
+      var buffer = StringBuffer();
+      var inQuotes = false;
+
+      for (int i = 0; i < line.length; i++) {
+        final char = line[i];
+
+        if (char == '"') {
+          if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+            buffer.write('"');
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char == ',' && !inQuotes) {
+          fields.add(buffer.toString());
+          buffer = StringBuffer();
+        } else {
+          buffer.write(char);
+        }
+      }
+
+      fields.add(buffer.toString());
+      return fields;
+    }
+
+    Map<String, dynamic> parseEmbeddingsCsvAsMergePayload(String csvText) {
+      final rawLines = csvText
+          .split(RegExp(r'\r?\n'))
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+
+      if (rawLines.isEmpty) {
+        throw const FormatException('CSV file is empty.');
+      }
+
+      final header = parseCsvLine(rawLines.first)
+          .map((h) => h.trim())
+          .toList();
+
+      final requiredColumns = <String>{
+        'id',
+        'student_id',
+        'student_name',
+        'roll_number',
+        'class',
+        'gender',
+        'age',
+        'phone_number',
+        'enrollment_date',
+        'capture_date',
+        'dimension',
+        'vector',
+      };
+
+      final headerSet = header.toSet();
+      if (!requiredColumns.every(headerSet.contains)) {
+        throw const FormatException(
+          'CSV format not supported. Expected embeddings export columns.',
+        );
+      }
+
+      final col = <String, int>{
+        for (int i = 0; i < header.length; i++) header[i]: i,
+      };
+
+      String valueAt(List<String> row, String key) {
+        final idx = col[key]!;
+        if (idx < 0 || idx >= row.length) return '';
+        return row[idx].trim();
+      }
+
+      final studentsByImportedId = <int, Map<String, dynamic>>{};
+      final embeddings = <String>[];
+
+      for (int lineIndex = 1; lineIndex < rawLines.length; lineIndex++) {
+        final line = rawLines[lineIndex];
+        final row = parseCsvLine(line);
+        if (row.length < header.length) {
+          continue;
+        }
+
+        final importedStudentId = asInt(valueAt(row, 'student_id'));
+        final studentName = valueAt(row, 'student_name');
+        if (importedStudentId <= 0 || studentName.isEmpty) {
+          continue;
+        }
+
+        studentsByImportedId.putIfAbsent(importedStudentId, () {
+          final enrollmentRaw = valueAt(row, 'enrollment_date');
+          final enrollmentDate = DateTime.tryParse(enrollmentRaw) ?? DateTime.now();
+          return {
+            'id': importedStudentId,
+            'name': studentName,
+            'roll_number': valueAt(row, 'roll_number'),
+            'class': valueAt(row, 'class'),
+            'gender': valueAt(row, 'gender'),
+            'age': asInt(valueAt(row, 'age')),
+            'phone_number': valueAt(row, 'phone_number'),
+            'enrollment_date': enrollmentDate.toIso8601String(),
+          };
+        });
+
+        final vector = valueAt(row, 'vector')
+            .split(';')
+            .map((e) => double.tryParse(e.trim()))
+            .whereType<double>()
+            .toList();
+        final dimension = asInt(valueAt(row, 'dimension'));
+        if (vector.isEmpty || (dimension > 0 && vector.length != dimension)) {
+          continue;
+        }
+
+        final captureRaw = valueAt(row, 'capture_date');
+        final captureDate = DateTime.tryParse(captureRaw) ?? DateTime.now();
+
+        final embeddingMap = <String, dynamic>{
+          'id': asInt(valueAt(row, 'id')),
+          'studentId': importedStudentId,
+          'vector': vector,
+          'captureDate': captureDate.toIso8601String(),
+        };
+
+        embeddings.add(jsonEncode(embeddingMap));
+      }
+
+      return {
+        'version': 1,
+        'exportDate': DateTime.now().toIso8601String(),
+        'students': studentsByImportedId.values.map(jsonEncode).toList(),
+        'embeddings': embeddings,
+        'attendance': <String>[],
+        'subjects': <String>[],
+        'teacherSessions': <String>[],
+      };
+    }
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['json'],
-        dialogTitle: 'Select backup JSON file to merge',
+        allowedExtensions: ['json', 'csv'],
+        dialogTitle: 'Select backup JSON or embeddings CSV file to merge',
       );
       if (result == null) return;
       final path = result.files.single.path;
       if (path == null) return;
 
       final file = File(path);
-      final jsonStr = await file.readAsString();
-      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final lowerPath = path.toLowerCase();
+      late final Map<String, dynamic> data;
+      if (lowerPath.endsWith('.csv')) {
+        final csvStr = await file.readAsString();
+        data = parseEmbeddingsCsvAsMergePayload(csvStr);
+      } else {
+        final jsonStr = await file.readAsString();
+        data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      }
 
       // Validate backup format
       if (!data.containsKey('students') && !data.containsKey('embeddings')) {
@@ -365,13 +572,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final currentSessions = prefs.getStringList('teacherSessions') ?? [];
 
       // ── Merge Students ──
-      final existingStudentNames = <String>{};
+      final existingStudentKeys = <String>{};
       int maxStudentId = 0;
       for (final s in currentStudents) {
         final map = jsonDecode(s) as Map<String, dynamic>;
-        final name = (map['name'] as String? ?? '').toLowerCase().trim();
-        final id = map['id'] as int? ?? 0;
-        existingStudentNames.add(name);
+        final key = '${normalizeText(map['name'])}|${normalizeText(map['roll_number'])}';
+        final id = asInt(map['id']);
+        existingStudentKeys.add(key);
         if (id > maxStudentId) maxStudentId = id;
       }
 
@@ -381,15 +588,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       for (final s in importStudents) {
         final map = jsonDecode(s) as Map<String, dynamic>;
-        final name = (map['name'] as String? ?? '').toLowerCase().trim();
-        final oldId = map['id'] as int? ?? 0;
+        final key = '${normalizeText(map['name'])}|${normalizeText(map['roll_number'])}';
+        final oldId = asInt(map['id']);
 
-        if (existingStudentNames.contains(name)) {
+        if (existingStudentKeys.contains(key)) {
           // Student already exists — find their current ID for remapping
           for (final cs in currentStudents) {
             final cMap = jsonDecode(cs) as Map<String, dynamic>;
-            if ((cMap['name'] as String? ?? '').toLowerCase().trim() == name) {
-              idMapping[oldId] = cMap['id'] as int? ?? 0;
+            final cKey = '${normalizeText(cMap['name'])}|${normalizeText(cMap['roll_number'])}';
+            if (cKey == key) {
+              idMapping[oldId] = asInt(cMap['id']);
               break;
             }
           }
@@ -401,48 +609,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
         idMapping[oldId] = maxStudentId;
         map['id'] = maxStudentId;
         currentStudents.add(jsonEncode(map));
-        existingStudentNames.add(name);
+        existingStudentKeys.add(key);
         addedStudents++;
       }
 
       // ── Merge Embeddings ──
       int addedEmbeddings = 0;
-      final existingEmbeddingStudentIds = <int>{};
+      int maxEmbeddingId = 0;
+      final existingEmbeddingKeys = <String>{};
       for (final e in currentEmbeddings) {
-        final map = jsonDecode(e) as Map<String, dynamic>;
-        existingEmbeddingStudentIds.add(map['student_id'] as int? ?? 0);
+        final map = normalizeEmbeddingMap(jsonDecode(e) as Map<String, dynamic>);
+        final studentId = readStudentId(map);
+        final captureDate = map['captureDate'] as String? ?? '';
+        final vector = List<double>.from(map['vector'] as List? ?? const <double>[]);
+        final sample = vector.take(6).map((v) => v.toStringAsFixed(6)).join(';');
+        existingEmbeddingKeys.add('$studentId|$captureDate|${vector.length}|$sample');
+        final id = asInt(map['id']);
+        if (id > maxEmbeddingId) maxEmbeddingId = id;
       }
 
       for (final e in importEmbeddings) {
-        final map = jsonDecode(e) as Map<String, dynamic>;
-        final oldStudentId = map['student_id'] as int? ?? 0;
+        final map = normalizeEmbeddingMap(jsonDecode(e) as Map<String, dynamic>);
+        final oldStudentId = readStudentId(map);
         final newStudentId = idMapping[oldStudentId] ?? oldStudentId;
+        map['studentId'] = newStudentId;
 
-        if (existingEmbeddingStudentIds.contains(newStudentId)) continue;
+        final captureDate = map['captureDate'] as String? ?? '';
+        final vector = List<double>.from(map['vector'] as List? ?? const <double>[]);
+        if (newStudentId <= 0 || vector.isEmpty) continue;
 
-        map['student_id'] = newStudentId;
+        final sample = vector.take(6).map((v) => v.toStringAsFixed(6)).join(';');
+        final key = '$newStudentId|$captureDate|${vector.length}|$sample';
+        if (existingEmbeddingKeys.contains(key)) continue;
+
+        maxEmbeddingId++;
+        map['id'] = maxEmbeddingId;
         currentEmbeddings.add(jsonEncode(map));
-        existingEmbeddingStudentIds.add(newStudentId);
+        existingEmbeddingKeys.add(key);
         addedEmbeddings++;
       }
 
       // ── Merge Attendance ──
       int addedAttendance = 0;
+      int maxAttendanceId = 0;
       final existingAttendanceKeys = <String>{};
       for (final a in currentAttendance) {
-        final map = jsonDecode(a) as Map<String, dynamic>;
-        existingAttendanceKeys.add('${map['student_id']}_${map['date']}');
+        final map = normalizeAttendanceMap(jsonDecode(a) as Map<String, dynamic>);
+        final studentId = readStudentId(map);
+        final date = (map['date'] as String? ?? '').split('T').first;
+        existingAttendanceKeys.add('${studentId}_$date');
+        final id = asInt(map['id']);
+        if (id > maxAttendanceId) maxAttendanceId = id;
       }
 
       for (final a in importAttendance) {
-        final map = jsonDecode(a) as Map<String, dynamic>;
-        final oldStudentId = map['student_id'] as int? ?? 0;
+        final map = normalizeAttendanceMap(jsonDecode(a) as Map<String, dynamic>);
+        final oldStudentId = readStudentId(map);
         final newStudentId = idMapping[oldStudentId] ?? oldStudentId;
-        map['student_id'] = newStudentId;
+        map['studentId'] = newStudentId;
+        if (newStudentId <= 0) continue;
 
-        final key = '${newStudentId}_${map['date']}';
+        final date = (map['date'] as String? ?? '').split('T').first;
+        final key = '${newStudentId}_$date';
         if (existingAttendanceKeys.contains(key)) continue;
 
+        maxAttendanceId++;
+        map['id'] = maxAttendanceId;
         currentAttendance.add(jsonEncode(map));
         existingAttendanceKeys.add(key);
         addedAttendance++;
@@ -450,17 +682,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // ── Merge Subjects ──
       int addedSubjects = 0;
+      int maxSubjectId = 0;
       final existingSubjectNames = <String>{};
       for (final s in currentSubjects) {
         final map = jsonDecode(s) as Map<String, dynamic>;
         existingSubjectNames.add((map['name'] as String? ?? '').toLowerCase().trim());
+        final id = asInt(map['id']);
+        if (id > maxSubjectId) maxSubjectId = id;
       }
 
       for (final s in importSubjects) {
         final map = jsonDecode(s) as Map<String, dynamic>;
         final name = (map['name'] as String? ?? '').toLowerCase().trim();
         if (existingSubjectNames.contains(name)) continue;
-        currentSubjects.add(s);
+
+        maxSubjectId++;
+        map['id'] = maxSubjectId;
+        currentSubjects.add(jsonEncode(map));
         existingSubjectNames.add(name);
         addedSubjects++;
       }

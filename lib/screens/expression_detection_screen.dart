@@ -119,7 +119,7 @@ class _ExpressionDetectionScreenState extends State<ExpressionDetectionScreen> {
       if (_availableCameras.isEmpty) return;
       _currentCamera = _availableCameras.first;
       final preferred = _availableCameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
+        (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => _availableCameras.first,
       );
       await _startCamera(preferred);
