@@ -1282,6 +1282,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) {
+        const textOutline = [
+          Shadow(
+            color: Color(0xAA000000),
+            blurRadius: 2,
+            offset: Offset(0, 0),
+          ),
+          Shadow(
+            color: Color(0x66000000),
+            blurRadius: 6,
+            offset: Offset(0, 1),
+          ),
+        ];
+
         final cardBody = Container(
           decoration: BoxDecoration(
             gradient: const LinearGradient(
@@ -1342,7 +1355,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
-                  color: AppConstants.textPrimary,
+                  color: Colors.white,
+                  shadows: textOutline,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1351,8 +1365,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
-                  color: AppConstants.accentColor,
+                  color: Color(0xFFEAF7FF),
                   fontWeight: FontWeight.w600,
+                  shadows: textOutline,
                 ),
               ),
               const SizedBox(height: 14),
@@ -1367,7 +1382,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Icon(
                           Icons.circle,
                           size: 6,
-                          color: AppConstants.textTertiary,
+                          color: Color(0xFF0B1320),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1376,8 +1391,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           line,
                           style: const TextStyle(
                             fontSize: 12,
-                            color: AppConstants.textSecondary,
+                            color: Colors.white,
                             height: 1.35,
+                            shadows: textOutline,
                           ),
                         ),
                       ),
@@ -1390,7 +1406,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Close'),
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      shadows: textOutline,
+                    ),
+                  ),
                 ),
               ),
             ],
