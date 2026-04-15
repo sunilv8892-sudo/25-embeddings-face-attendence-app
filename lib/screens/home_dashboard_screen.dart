@@ -116,7 +116,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
         centerTitle: true,
         toolbarHeight: 62,
         title: const Text(
-          'FAS',
+          'Face Attendance System',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,

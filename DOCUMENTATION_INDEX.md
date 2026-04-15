@@ -16,6 +16,11 @@ This index points to the maintained, code-accurate documentation for the current
 - Data schema, thresholds, and tuning notes
 - Known issues and mitigations
 
+3. [PRESENTATION_README.md](PRESENTATION_README.md)
+- Deep, slide-ready algorithm explanation
+- Line-by-line walkthrough of core runtime logic (M1-M5, expression cues, attendance matcher)
+- Mathematical formulas, thresholds, and viva-ready Q&A
+
 ## Supporting Documents
 
 1. [models/README.md](models/README.md)

@@ -13,8 +13,10 @@ This repository contains the current production architecture of the FAS app:
 
 1. [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)
 2. [FACE_RECOGNITION_CODEBOOK.md](FACE_RECOGNITION_CODEBOOK.md)
+3. [PRESENTATION_README.md](PRESENTATION_README.md)
 
 Use the index for quick navigation. Use the codebook for deep implementation details.
+Use the presentation README for slide-ready algorithm walkthroughs and line-by-line explanations of core logic.
 
 ## Quick Runtime Overview
 
