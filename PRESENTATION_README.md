@@ -103,7 +103,7 @@ Used in lib/modules/m5_liveness_detection.dart to detect blinks.
    - centered face
 4. Crop face from full frame
 5. Generate 128D normalized embedding
-6. Repeat until required sample count (default 10)
+6. Repeat until required sample count (default 20)
 7. Save student record + embeddings
 
 ### 4.2 Attendance Flow
