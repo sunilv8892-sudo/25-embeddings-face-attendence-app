@@ -84,7 +84,7 @@ class AppConstants {
   );
 
   static const double similarityThreshold = 0.75;
-  static const int requiredEnrollmentSamples = 20;
+  static const int requiredEnrollmentSamples = 25;
   static const int recommendedEnrollmentSamples = 15;
   static const int embeddingDimension = 128;
 
