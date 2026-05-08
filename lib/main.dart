@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'database/database_manager.dart';
 import 'screens/home_dashboard_screen.dart';
 import 'screens/enrollment_screen.dart';
@@ -14,6 +15,7 @@ late DatabaseManager _dbManager;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   // Initialize database
   _dbManager = DatabaseManager();
@@ -43,7 +45,8 @@ class FaceRecognitionApp extends StatelessWidget {
         AppConstants.routeDatabase: (context) => const DatabaseScreen(),
         AppConstants.routeExport: (context) => const ExportScreen(),
         AppConstants.routeSettings: (context) => const SettingsScreen(),
-        AppConstants.routeExpressionDetection: (context) => const ExpressionDetectionScreen(),
+        AppConstants.routeExpressionDetection: (context) =>
+            const ExpressionDetectionScreen(),
       },
     );
   }

@@ -153,7 +153,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
           child: LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxHeight < 740;
-              final horizontalPadding = constraints.maxWidth < 390 ? 12.0 : 16.0;
+              final horizontalPadding = constraints.maxWidth < 390
+                  ? 12.0
+                  : 16.0;
               final unit = constraints.maxHeight / 100.0;
               final heroHeight = unit * 20;
               final gapAfterHero = unit * 3;
@@ -168,46 +170,108 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
               final toolsCardsHeight = unit * 30;
 
               final usedHeight =
-                heroHeight +
-                gapAfterHero +
-                statsHeight +
-                gapAfterStats +
-                featuredLabelHeight +
-                gapAfterFeaturedLabel +
-                featuredCardsHeight +
-                gapBetweenSections +
-                toolsLabelHeight +
-                gapAfterToolsLabel +
-                toolsCardsHeight;
+                  heroHeight +
+                  gapAfterHero +
+                  statsHeight +
+                  gapAfterStats +
+                  featuredLabelHeight +
+                  gapAfterFeaturedLabel +
+                  featuredCardsHeight +
+                  gapBetweenSections +
+                  toolsLabelHeight +
+                  gapAfterToolsLabel +
+                  toolsCardsHeight;
               final restHeight = (constraints.maxHeight - usedHeight)
-                .clamp(0.0, constraints.maxHeight)
-                .toDouble();
+                  .clamp(0.0, constraints.maxHeight)
+                  .toDouble();
 
-              return Padding(
-                padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 0),
-                child: Column(
-                  children: [
-                    SizedBox(height: heroHeight, child: _buildHeroSection(compact)),
-                    SizedBox(height: gapAfterHero),
-                    SizedBox(height: statsHeight, child: _buildStatsRow(compact)),
-                    SizedBox(height: gapAfterStats),
-                    SizedBox(
-                      height: featuredLabelHeight,
-                      child: _buildSectionLabel('Featured', const Color(0xFF26D7FF), compact),
-                    ),
-                    SizedBox(height: gapAfterFeaturedLabel),
-                    SizedBox(height: featuredCardsHeight, child: _buildFeaturedGrid(compact)),
-                    SizedBox(height: gapBetweenSections),
-                    SizedBox(
-                      height: toolsLabelHeight,
-                      child: _buildSectionLabel('More Tools', const Color(0xFFFFB830), compact),
-                    ),
-                    SizedBox(height: gapAfterToolsLabel),
-                    SizedBox(height: toolsCardsHeight, child: _buildToolsGrid(compact)),
-                    SizedBox(height: restHeight),
-                  ],
+              final content = Padding(
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  0,
+                  horizontalPadding,
+                  0,
                 ),
+                child: compact
+                    ? SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildHeroSection(compact),
+                              const SizedBox(height: 16),
+                              _buildStatsRow(compact),
+                              const SizedBox(height: 20),
+                              _buildSectionLabel(
+                                'Featured',
+                                const Color(0xFF26D7FF),
+                                compact,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildFeaturedGrid(compact),
+                              const SizedBox(height: 20),
+                              _buildSectionLabel(
+                                'More Tools',
+                                const Color(0xFFFFB830),
+                                compact,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildToolsGrid(compact),
+                              const SizedBox(height: 12),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          SizedBox(
+                            height: heroHeight,
+                            child: _buildHeroSection(compact),
+                          ),
+                          SizedBox(height: gapAfterHero),
+                          SizedBox(
+                            height: statsHeight,
+                            child: _buildStatsRow(compact),
+                          ),
+                          SizedBox(height: gapAfterStats),
+                          SizedBox(
+                            height: featuredLabelHeight,
+                            child: _buildSectionLabel(
+                              'Featured',
+                              const Color(0xFF26D7FF),
+                              compact,
+                            ),
+                          ),
+                          SizedBox(height: gapAfterFeaturedLabel),
+                          SizedBox(
+                            height: featuredCardsHeight,
+                            child: _buildFeaturedGrid(compact),
+                          ),
+                          SizedBox(height: gapBetweenSections),
+                          SizedBox(
+                            height: toolsLabelHeight,
+                            child: _buildSectionLabel(
+                              'More Tools',
+                              const Color(0xFFFFB830),
+                              compact,
+                            ),
+                          ),
+                          SizedBox(height: gapAfterToolsLabel),
+                          SizedBox(
+                            height: toolsCardsHeight,
+                            child: _buildToolsGrid(compact),
+                          ),
+                          SizedBox(height: restHeight),
+                        ],
+                      ),
               );
+
+              return content;
             },
           ),
         ),
@@ -223,7 +287,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
           height: compact ? 9 : 10,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [accent, accent.withValues(alpha: 0.15)]),
+            gradient: RadialGradient(
+              colors: [accent, accent.withValues(alpha: 0.15)],
+            ),
             boxShadow: [
               BoxShadow(
                 color: accent.withValues(alpha: 0.35),
@@ -296,10 +362,16 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     bool compact,
   ) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10, vertical: compact ? 8 : 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 10,
+        vertical: compact ? 8 : 10,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [accent.withValues(alpha: 0.18), accent.withValues(alpha: 0.06)],
+          colors: [
+            accent.withValues(alpha: 0.18),
+            accent.withValues(alpha: 0.06),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -314,7 +386,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
-                colors: [accent.withValues(alpha: 0.95), accent.withValues(alpha: 0.62)],
+                colors: [
+                  accent.withValues(alpha: 0.95),
+                  accent.withValues(alpha: 0.62),
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -358,8 +433,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     final greeting = now.hour < 12
         ? 'Good Morning'
         : now.hour < 17
-            ? 'Good Afternoon'
-            : 'Good Evening';
+        ? 'Good Afternoon'
+        : 'Good Evening';
 
     return GlassContainer(
       borderRadius: 26,
@@ -414,17 +489,23 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF00E096).withValues(alpha: 0.65),
+                            color: const Color(
+                              0xFF00E096,
+                            ).withValues(alpha: 0.65),
                             blurRadius: 10,
                             spreadRadius: 1,
                           ),
                           BoxShadow(
-                            color: const Color(0xFF26D7FF).withValues(alpha: 0.42),
+                            color: const Color(
+                              0xFF26D7FF,
+                            ).withValues(alpha: 0.42),
                             blurRadius: 12,
                             spreadRadius: -1,
                           ),
                           BoxShadow(
-                            color: const Color(0xFFFFB830).withValues(alpha: 0.30),
+                            color: const Color(
+                              0xFFFFB830,
+                            ).withValues(alpha: 0.30),
                             blurRadius: 14,
                             spreadRadius: -2,
                           ),
@@ -518,7 +599,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
         child: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [item.c1.withValues(alpha: 0.92), item.c2.withValues(alpha: 0.84)],
+              colors: [
+                item.c1.withValues(alpha: 0.92),
+                item.c2.withValues(alpha: 0.84),
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -532,7 +616,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
               ),
             ],
           ),
-          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12, vertical: compact ? 10 : 11),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 10 : 12,
+            vertical: compact ? 10 : 11,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -542,7 +629,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
                   color: Colors.white.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(item.icon, color: Colors.white, size: compact ? 20 : 22),
+                child: Icon(
+                  item.icon,
+                  color: Colors.white,
+                  size: compact ? 20 : 22,
+                ),
               ),
               SizedBox(width: compact ? 9 : 10),
               Expanded(
@@ -615,31 +706,18 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // 3-scale gap of the full screen equals ~10% of this 30-scale tools block.
-        final mainAxisSpacing = (constraints.maxHeight * 0.10)
-            .clamp(compact ? 16.0 : 18.0, compact ? 26.0 : 30.0)
-            .toDouble();
-        final crossAxisSpacing = compact ? 6.0 : 7.0;
-        final tileHeight =
-            ((constraints.maxHeight - mainAxisSpacing) / 2)
-                .clamp(compact ? 54.0 : 58.0, compact ? 66.0 : 72.0)
-                .toDouble();
-
-        return GridView.builder(
-          itemCount: tools.length,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: mainAxisSpacing,
-            crossAxisSpacing: crossAxisSpacing,
-            mainAxisExtent: tileHeight,
-          ),
-          itemBuilder: (context, index) {
-            return _buildToolCard(tools[index]);
-          },
-        );
+    return GridView.builder(
+      itemCount: tools.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: compact ? 8.0 : 10.0,
+        crossAxisSpacing: compact ? 6.0 : 7.0,
+        mainAxisExtent: compact ? 62.0 : 72.0,
+      ),
+      itemBuilder: (context, index) {
+        return _buildToolCard(tools[index]);
       },
     );
   }
